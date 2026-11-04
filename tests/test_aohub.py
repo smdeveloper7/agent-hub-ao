@@ -246,6 +246,32 @@ class ReportTest(Base):
         self.assertFalse(self.store.claim_notice_send(n["notice_id"], "main-3"))
 
 
+class LauncherTest(unittest.TestCase):
+    """고정 실행 파일은 깔린 판 중 가장 새 판을 가리킨다(옛 판이 돌아도 새 판으로)."""
+
+    def test_points_to_newest_installed_version(self):
+        import aohub.launcher as L
+        tmp = tempfile.mkdtemp(prefix="aohub-launch-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        for v in ("0.4.3", "0.4.10", "0.4.4"):
+            os.makedirs(os.path.join(tmp, "cache", v, "scripts"))
+            os.makedirs(os.path.join(tmp, "cache", v, ".claude-plugin"))
+            open(os.path.join(tmp, "cache", v, "scripts", "aohub.py"), "w").close()
+            json.dump({"version": v}, open(os.path.join(tmp, "cache", v, ".claude-plugin", "plugin.json"), "w"))
+        old_root, old_home = L.ROOT, os.environ.get("AOHUB_HOME")
+        os.environ["AOHUB_HOME"] = os.path.join(tmp, "home")
+        try:
+            L.ROOT = os.path.join(tmp, "cache", "0.4.3")  # 옛 판이 돌 때
+            target = L.target_of_shim(L.ensure())
+            self.assertTrue(target.endswith("0.4.10/scripts/aohub.py"), target)
+        finally:
+            L.ROOT = old_root
+            if old_home is None:
+                os.environ.pop("AOHUB_HOME", None)
+            else:
+                os.environ["AOHUB_HOME"] = old_home
+
+
 class ManagerTest(Base):
     """Main 을 AO 프로젝트 hub 의 orchestrator(Manager Agent)로 쓸 때."""
 

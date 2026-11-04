@@ -44,16 +44,34 @@ def target_of_shim(path):
     return None
 
 
+def newest_root():
+    """플러그인 캐시처럼 판 이름 폴더가 나란히 있으면 그중 가장 새 판. 아니면 지금 폴더."""
+    parent = os.path.dirname(ROOT)
+    best = ROOT
+    try:
+        names = os.listdir(parent)
+    except OSError:
+        return best
+    for name in names:
+        root = os.path.join(parent, name)
+        if root != ROOT and os.path.exists(os.path.join(root, "scripts", "aohub.py")) \
+                and os.path.exists(os.path.join(root, ".claude-plugin", "plugin.json")) \
+                and version_of(root) > version_of(best):
+            best = root
+    return best
+
+
 def ensure():
-    """고정 실행 파일이 없거나, 가리키는 판보다 지금 판이 같거나 새로우면 지금 판을 가리키게 한다."""
+    """고정 실행 파일이 없거나, 가리키는 판보다 깔린 최신 판이 같거나 새로우면 최신 판을 가리키게 한다."""
     path = shim_path()
-    me = os.path.join(ROOT, "scripts", "aohub.py").replace("\\", "/")
+    root = newest_root()
+    me = os.path.join(root, "scripts", "aohub.py").replace("\\", "/")
     cur = target_of_shim(path)
     if cur == me:
         return path
     if cur and os.path.exists(cur):
         their_root = os.path.dirname(os.path.dirname(cur))
-        if version_of(their_root) > version_of(ROOT):
+        if version_of(their_root) > version_of(root):
             return path
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
