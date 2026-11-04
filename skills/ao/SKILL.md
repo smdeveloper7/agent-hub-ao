@@ -30,6 +30,19 @@ AO 로 맡긴 작업은 AO 로만 띄우고, 보고, 멈춘다.
    감시 프로세스는 이 세션의 inbox 주소와 토큰을 물려받아야 하므로 반드시 이 세션 안에서 띄운다. 다른 터미널에서 띄우지 않는다.
 4. 미처리 질문이 있으면 사용자에게 묻는다(아래 "질문").
 
+## 새 프로젝트 등록
+
+사용자가 새 저장소를 쓰자고 하면, 저장소 경로·프로젝트 id·worker agent 를 확인하고 사용자 확인 뒤 등록한다.
+
+```
+ao project add --path <저장소> --id <id> --name <id> --orchestrator-agent claude-code --worker-agent <claude-code|codex>
+ao project set-config <id> --permission auto --orchestrator-agent claude-code --worker-agent <agent> --default-branch <기본 브랜치>
+aohub setup-project <id>
+```
+
+- `set-config` 는 설정을 통째로 바꾼다. 이미 있는 프로젝트는 `ao project get <id> --json` 의 config 를 고쳐 `--config-json` 으로 넣는다.
+- 원격이 없는 저장소는 기본 브랜치를 꼭 준다. 등록 뒤 `aohub projects` 로 확인한다.
+
 ## 배정
 
 1. 사용자 요청에서 프로젝트, 할 일, 완료 조건(무엇을 실행해 무엇이 나오면 끝인지), 검증 명령을 정한다. 모호하면 사용자에게 먼저 묻는다.

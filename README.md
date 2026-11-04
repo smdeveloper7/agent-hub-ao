@@ -6,17 +6,19 @@
 
 ```mermaid
 flowchart TB
-    U[사용자] <-->|대화| M[Main Claude Code<br/>허브 폴더에서 연 세션]
+    U[사용자] <-->|"대화 (AO 앱)"| M["Main = Manager Agent<br/>(AO 프로젝트 hub 의 orchestrator)"]
     M <-->|"배정·답변·지시 (aohub → ao send)"| S["AO 프로젝트별 Supervisor<br/>(orchestrator 세션)"]
     S <-->|"ao spawn · ao send · ao report"| W["Coding Workers<br/>Claude Code · Codex"]
     S -->|"sup-report (작업 ID)"| D[(상태 DB<br/>~/.claude-hub-ao)]
-    WT[aohub watch<br/>Main 세션 안의 감시 프로세스] -->|AO 상태·보고 다시 읽기, 직접 검증| D
-    WT -->|"[AO 알림]·[AO 질문] → 세션 inbox"| M
+    WT["aohub watch<br/>(감시 프로세스)"] -->|AO 상태·보고 다시 읽기, 직접 검증| D
+    WT -->|"[AO 알림]·[AO 질문] (ao send)"| M
     M -->|업무 요약·사용자 결정| D
     D --> R[기록 모듈] -->|Markdown| V[(Obsidian Vault)]
-    V -.->|관련 프로젝트·결정 기록 참조| M
+    V -.->|관련 프로젝트·결정·인계 노트 참조| M
     U -.->|현황 확인·메모| V
 ```
+
+Main 은 AO 앱의 **Manager Agent** 세션이 기본입니다. 허브 폴더에서 연 `claude` 창도 Main 이 될 수 있습니다(비상용, 알림은 세션 inbox 로).
 
 ## 역할
 
@@ -35,7 +37,8 @@ AO 로 맡긴 작업은 AO 로만 띄우고 멈춥니다. 같은 작업을 `clau
 |---|---|---|
 | AO 연동 | `aohub/`, `scripts/aohub.py` | 배정, 질문·답변, 후속 지시, 직접 검증, 감시, 재시작 복구 명령. Python 표준 라이브러리만 씁니다 |
 | AO 스킬 | `skills/ao/` | Main 운영 규칙: 세션을 열 때, 배정, 알림·질문 처리, 오류 처리, 하루 정리 |
-| 감시 훅 | `hooks/ao_watch_start.py` | 허브 폴더에서 세션을 열면 `aohub watch` 를 그 세션에 붙여 띄웁니다 |
+| 감시 훅 | `hooks/ao_watch_start.py` | 허브 폴더에서 연 세션에 이름 `hub` 를 붙이고 `aohub watch` 를 붙여 띄웁니다(허브 창 모드) |
+| 위키 보호 훅 | `hooks/vault_main_only.py` | Obsidian 위키는 허브 Main 만 고치게 합니다 |
 | 허브 규칙 틀 | `templates/hub/` | 허브 역할(`CLAUDE.md`), 세션 사이 약속과 보고 형식(`COORDINATION.md`), 현황판(`STATUS.md`)과 데이터 파일 |
 | 대시보드 | `dashboard/` | 세션, 사용자 결정, 현황, 세션 사이 메시지를 보여 주는 읽기 전용 웹 화면 |
 | 허브 훅 | `hooks/` | 대시보드 열기, 다른 세션의 허브 폴더 쓰기 막기, git 커밋 문구 검사 |
@@ -93,61 +96,112 @@ python <플러그인 폴더>/scripts/aohub.py doctor
 
 상태와 설정은 플러그인 폴더와 따로 `~/.claude-hub-ao` 에 둡니다(`AOHUB_HOME` 으로 변경). 일일 로그를 기존 기록 스크립트로 남기려면 `--raw-script <스크립트>` 를 줍니다.
 
-### 4. 허브 세션 열기
-
-```sh
-cd ~/hub
-claude
-```
-
-세션이 열리면 훅이 세션 이름을 `hub` 로 붙이고(이미 이름이 있으면 그대로), 감시 프로세스를 이 세션에 붙이고, 대시보드(http://127.0.0.1:4990)를 띄웁니다. 시작 화면에 `AO 감시 시작(Main hub, …)` 이 보이면 이 창이 Main 입니다.
-
-### 5. Manager Agent 로 쓰기(권장)
-
-Main 을 AO 프로젝트의 orchestrator 로 띄우면 AO 앱(과 모바일 앱) 한 곳에서 Main 과 대화하고, Supervisor·Worker 진행도 같이 봅니다.
-알림은 공식 경로인 `ao send` 로 들어가고, 감시 프로세스는 Main 세션과 따로 돕니다.
+### 4. Manager Agent 띄우기
 
 ```sh
 python ~/.claude-hub-ao/bin/aohub.py setup-manager --path ~/hub --name "Manager Agent"
 ```
 
 허브 폴더를 git 저장소로 만들고, AO 프로젝트 `hub`(이름 Manager Agent)로 등록하고, Manager 규칙을 넣고, Manager 세션과 감시 프로세스를 띄웁니다. 다시 실행해도 결과가 같습니다.
-이후에는 AO 앱에서 **Manager Agent** 세션을 열어 말합니다. 대화가 길어지면 Manager 에게 "대화 비워줘" 라고 합니다. Manager 가 이 대화의 요약을 Obsidian `세션` 폴더에 인계 노트로 남기고 자기 세션을 닫으면, 새 Manager 가 그 노트와 DB 상태로 이어 갑니다(허브 창은 `session-note` 뒤 `/clear`). 허브 폴더에서 연 `claude` 창은 비상용으로 남습니다(그 창을 열면 그 창이 Main 을 이어받습니다).
+AO 앱의 세션 목록에 **Manager Agent** 가 보이면 준비된 것입니다.
 
-## 쓰는 법
+`~/.claude-hub-ao/bin/aohub.py` 는 aohub 를 처음 실행할 때 생기는 고정 실행 파일입니다. 아직 없으면 3단계의 `<플러그인 폴더>/scripts/aohub.py` 를 그대로 씁니다.
 
-새 화면은 없습니다. Main 대화창(AO 앱의 Manager Agent, 또는 허브 폴더의 `claude` 창)이 쓰는 곳입니다.
+### 5. (비상용) 허브 창
 
+AO 앱을 쓸 수 없을 때는 허브 폴더에서 Claude 를 엽니다.
+
+```sh
+cd ~/hub
+claude
 ```
-나: ao-demo-a 에 multiply 함수 추가 맡겨줘. 시험 통과가 완료 조건이야.
-Main: T-20261104-01 로 Supervisor ao-demo-a-4 에 배정했습니다(도착 확인).
-      … (입력하지 않아도 결과가 들어옵니다)
-Main: [AO 알림] T-20261104-01 완료 검증 통과. Worker 작업 공간에서 시험을 직접 돌려 4개 통과, 커밋 aa0d8c7.
-Main: [AO 질문] Q-20261104-01 divide 에서 0 으로 나누면 어떻게 할까요? (ValueError / 기본 오류 / None)
-나: ValueError 로
-Main: Supervisor 에 전달했고 도착을 확인했습니다. 결정과 이유를 기록했습니다.
-```
+
+시작 화면에 `AO 감시 시작(Main hub, …)` 이 보이면 이 창이 Main 입니다. 이 창을 열면 Main 을 이 창이 가져가니, Manager Agent 로 돌아갈 때는 Manager 에게 "resume 해줘" 라고 합니다.
+
+## 사용법
+
+### 어디에 말하나
+
+AO 앱을 열고 **Manager Agent** 세션에 말합니다. 명령어를 외울 필요는 없습니다. Manager 가 `/agent-hub-ao:ao` 스킬 규칙대로 aohub 명령을 실행합니다.
+Supervisor·Worker 세션에는 직접 말하지 않습니다. 직접 지시하면 작업 ID, 결정 기록, 검증에서 빠집니다.
+Manager 가 쓰는 명령 전체는 [docs/ao-bridge.md](docs/ao-bridge.md) 의 "명령" 표에 있습니다.
+
+### 하루 흐름
+
+1. **맡기기**: 어느 프로젝트에, 무엇을, 언제 끝난 걸로 볼지 말합니다.
+
+   ```
+   ao-demo-a 에 calc 모듈에 sqrt 함수 추가해줘. 완료 조건은 시험 통과랑 커밋. worker 는 codex 로.
+   ```
+
+   Manager 는 프로젝트 노트와 이전 결정을 먼저 읽고, 작업 ID(`T-…`)를 만들어 그 프로젝트 Supervisor 에 배정한 뒤 "배정 도착 확인" 을 알려 줍니다.
+   완료 조건을 말하지 않으면 Manager 가 먼저 묻습니다.
+
+2. **기다리기**: 따로 묻지 않아도 Manager 대화에 알림이 들어옵니다.
+
+   | 알림 | 뜻 | 할 일 |
+   |---|---|---|
+   | `[AO 알림] … 완료 검증 통과` | Manager 쪽이 Worker 작업 공간에서 검증 명령을 직접 돌려 통과 | 확인만 |
+   | `[AO 알림] … 사용자 확인 필요` | 검증 명령이 없는 일(문서, 조사)이 끝남 | 결과물을 보고 "확인했어" 또는 고칠 점 말하기 |
+   | `[AO 질문] Q-…` | Worker 가 사용자 판단을 물음(Worker → Supervisor → Manager) | 선택지 중 하나를 이유와 함께 말하기 |
+   | `[AO 알림] … 막힘` | Supervisor 가 기준으로 못 풀었음(재시도 소진, 권한, AO 설정, 범위 변경) | Manager 가 보여 주는 원인과 선택지에서 결정 |
+
+   Worker 실행 실패나 시험 실패 같은 일반 오류는 Supervisor 가 처리하므로 보통 올라오지 않습니다.
+
+3. **답하기**: 질문에는 평소 말로 답합니다. 이유도 같이 말하면 결정 노트에 남습니다.
+
+   ```
+   ValueError 로 해줘. 조용히 넘어가면 나중에 찾기 어려워서.
+   ```
+
+   권한 승인(도구 실행 허락)은 대화로 할 수 없습니다. AO 앱에서 해당 세션의 승인 버튼을 누릅니다.
+
+4. **하루 정리**: "오늘 작업 정리해줘" 라고 하면 Manager 가 AO 노트를 갱신하고 위키를 정리합니다.
+
+5. **대화 비우기**: 맡긴 일이 모두 끝났거나 대화가 길어지면 "대화 비워줘" 라고 합니다.
+   Manager 가 이번 대화의 요약(사용자 의도, 정한 방향, 남은 아이디어)을 Obsidian `세션/Main <시각>.md` 에 인계 노트로 남기고 자기 세션을 닫습니다.
+   곧바로 새 Manager Agent 가 뜨고, 인계 노트와 진행 중 작업, 미처리 질문을 읽고 이어 갑니다. 처리 안 된 알림도 새 Manager 에게 다시 갑니다.
+
+### 자주 쓰는 말
+
+| 하고 싶은 것 | 이렇게 말하기 |
+|---|---|
+| 진행 상황 | "AO 작업 상태 알려줘", "T-20261104-05 어디까지 됐어?" |
+| 답 안 한 질문 | "대기 중인 질문 있어?" |
+| 추가 지시 | "T-20261104-05 에 테스트 케이스 하나 더 넣으라고 해줘" |
+| 확인 필요 작업 완료 | "T-20261104-07 문서 확인했어, 끝내줘" |
+| 새 저장소 쓰기 | "C:\…\내저장소 를 AO 프로젝트로 등록해줘. worker 는 codex" (처음 한 번) |
+| 오류 기준 바꾸기 | "Codex 모델 오류 나면 gpt-5.6-sol 로 다시 띄우게 해줘", "시험 실패는 3번까지 다시 시키게 해줘" |
+| 하루 정리 | "오늘 작업 정리해줘" |
+| 대화 비우기 | "대화 비워줘" |
+
+### 보는 곳
 
 | 화면 | 용도 |
 |---|---|
-| Main 대화창(AO 앱 Manager Agent 또는 허브 `claude` 창) | 맡기기, 결과·질문 받기, 답하기, "AO 작업 상태 알려줘", "오늘 작업 정리해줘" |
-| Obsidian | `wiki/AO 현황.base`(프로젝트 현황, 판단 대기, 완료 작업, 결정 기록), 작업·결정·프로젝트 노트. 메모를 더해도 보존됩니다 |
-| AO 데스크톱 앱 | Manager Agent 와 대화(Manager 모드), Supervisor·Worker 진행 보기, 권한 승인. Supervisor 에게 직접 지시하면 Main 기록에서 빠지니 지시는 Manager 에게 합니다 |
-| 허브 대시보드 | 허브 팀 세션 현황. AO 가 띄운 세션과 이 PC 의 다른 세션은 접힌 묶음으로 둡니다(AO 작업은 AO 앱과 Obsidian 에서 봅니다) |
+| AO 앱 · Manager Agent | 대화, 알림, 질문과 답 |
+| AO 앱 · 프로젝트 세션 | Supervisor·Worker 가 실제로 일하는 모습, 권한 승인. 보기 전용으로 씁니다 |
+| Obsidian | `wiki/AO 현황.base`(프로젝트 현황, 판단 대기, 완료 작업, 결정 기록), `wiki/tasks`·`wiki/decisions`·`wiki/projects` 노트, `세션` 인계 노트 |
+| 허브 대시보드 | 허브 팀 세션 현황(AO 세션과 다른 세션은 접힌 묶음) |
 
-Main 이 쓰는 명령은 `/agent-hub-ao:ao` 스킬에 있고, 사용자가 직접 칠 일은 없습니다. 자주 쓰는 것:
+Obsidian 노트에 메모를 더해도 보존됩니다. 노트의 상태나 체크박스를 바꿔도 작업이 재개되거나 승인되지는 않습니다. 결정과 승인은 늘 Manager 대화에서 합니다.
 
-| 명령 | 하는 일 |
-|---|---|
-| `aohub assign --project --title --request --done --verify [--worker-agent]` | 작업 ID 발급, 프로젝트당 Supervisor 하나 유지, 배정 도착 확인 |
-| `aohub status [작업]` | 기록과 AO 에 방금 다시 물은 세션 상태 |
-| `aohub questions` / `answer <Q> --text --reason` | 판단 대기 목록, 사용자 답 전달과 결정 기록 |
-| `aohub tell <작업> --text` | 같은 작업의 Supervisor 에 후속 지시 |
-| `aohub accept <작업> --note` | 검증 명령 없는 작업을 사용자 확인으로 완료 |
-| `aohub resume` | Main 재시작 뒤 진행 중 작업, 미처리 질문·알림, 읽을 노트 |
-| `aohub daily` | 오늘 AO 작업 정리와 `wiki/log.md` 한 줄 |
+### 하지 않을 것
 
-전체 명령과 옵션은 [docs/ao-bridge.md](docs/ao-bridge.md) 에 있습니다.
+- Supervisor·Worker 에게 AO 앱에서 직접 지시하지 않습니다. 지시는 Manager 에게 합니다.
+- Manager 프로젝트(`hub`)에는 일을 맡기지 않습니다. 일은 다른 AO 프로젝트에 맡깁니다.
+- 위키(`wiki/`)는 Main 이 아닌 세션에서 고치지 않습니다(훅이 막습니다). 일지(raw) 한 줄 쓰기는 어느 세션이든 공통 스크립트로 합니다.
+- 허브 창(`~/hub` 의 `claude`)과 Manager Agent 를 동시에 Main 으로 쓰지 않습니다. 마지막에 열거나 resume 한 쪽이 Main 입니다.
+
+### 문제가 생겼을 때
+
+| 증상 | 확인 | 해결 |
+|---|---|---|
+| 알림이 안 옴 | `python ~/.claude-hub-ao/bin/aohub.py doctor` 의 `ao daemon`, `watcher` 줄 | AO 앱이 꺼졌으면 켭니다. 감시 프로세스가 없으면 Manager 에게 "resume 해줘" |
+| 지금 Main 이 어디인지 모름 | `aohub doctor` 의 `watcher` 줄(`Main ao:hub-N` 이면 Manager Agent) | 원하는 쪽에서 resume |
+| Supervisor 가 `idle` 인데 아무 일도 안 함 | AO 데몬 로그, `aohub status <작업>` | 원격 없는 저장소면 프로젝트 기본 브랜치(`--default-branch`)를 지정합니다 |
+| Codex Worker 가 바로 실패 | `aohub worker-state <worker>` 의 `error` | 모델 미지원이면 `config.json` 의 `error_policy.fallback_models` 나 프로젝트 Worker 모델을 지정합니다 |
+| 같은 알림이 또 옴 | Manager 가 `ack` 를 했는지 | 새 Manager 로 바뀌면 처리 안 된 알림은 다시 오는 것이 정상입니다 |
 
 ## 완료와 오류
 
