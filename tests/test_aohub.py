@@ -246,6 +246,46 @@ class ReportTest(Base):
         self.assertFalse(self.store.claim_notice_send(n["notice_id"], "main-3"))
 
 
+class VaultMainOnlyHookTest(unittest.TestCase):
+    """Obsidian 위키는 허브 Main 만 쓴다. 보기와 일지(raw)는 막지 않는다."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(ROOT, "hooks"))
+        import vault_main_only
+        self.hook = vault_main_only
+        self.tmp = tempfile.mkdtemp(prefix="aohub-vmo-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.home = os.path.join(self.tmp, "home")
+        self.vault = os.path.join(self.tmp, "vault")
+        os.makedirs(os.path.join(self.vault, "wiki"))
+        os.environ["AOHUB_HOME"] = self.home
+        self.addCleanup(os.environ.pop, "AOHUB_HOME", None)
+        config.save(dict(config.DEFAULTS, vault_dir=self.vault))
+        s = Store()
+        s.attach_main("ao:hub-1")
+        s.close()
+
+    def check(self, path, sid="claude-x", env=None):
+        inp = {"session_id": sid, "cwd": self.tmp, "tool_name": "Edit", "tool_input": {"file_path": path}}
+        return self.hook.blocked(inp, self.home, env or {})
+
+    def test_non_main_cannot_edit_wiki(self):
+        self.assertIsNotNone(self.check(os.path.join(self.vault, "wiki", "index.md")))
+
+    def test_manager_and_raw_and_other_files_allowed(self):
+        wiki = os.path.join(self.vault, "wiki", "projects", "x.md")
+        self.assertIsNone(self.check(wiki, env={"AO_SESSION_ID": "hub-1"}))   # Manager Agent
+        self.assertIsNone(self.check(os.path.join(self.vault, "raw", "2026-11-04.md")))
+        self.assertIsNone(self.check(os.path.join(self.tmp, "code.py")))
+
+    def test_terminal_main_allowed(self):
+        s = Store()
+        s.attach_main("claude-main")
+        s.close()
+        self.assertIsNone(self.check(os.path.join(self.vault, "wiki", "index.md"), sid="claude-main"))
+        self.assertIsNotNone(self.check(os.path.join(self.vault, "wiki", "index.md"), env={"AO_SESSION_ID": "hub-1"}))
+
+
 class LauncherTest(unittest.TestCase):
     """고정 실행 파일은 깔린 판 중 가장 새 판을 가리킨다(옛 판이 돌아도 새 판으로)."""
 
@@ -292,6 +332,50 @@ class ManagerTest(Base):
         self.assertEqual(len(bodies), 1)
         self.assertTrue(bodies[0].startswith("[AO 질문] %s ·" % sent[0]))
         self.assertIn("bin/aohub.py", bodies[0])  # 판이 바뀌어도 그대로인 고정 실행 파일
+
+    def test_manager_reset_replaces_session_and_keeps_state(self):
+        self.ao.kill = lambda sid: self.ao.sessions_.__setitem__(sid, dict(self.ao.sessions_[sid], isTerminated=True)) or             [o.update(isTerminated=True) for o in self.ao.orchs if o["id"] == sid]
+        t, _, _ = self.assign()
+        self.b.sup_report(t["task_id"], "question", "질문?", worker="w1")
+        first = self.ao.spawn("hub", "Manager Agent", kind="orchestrator")
+        self.ao.sessions_[first]["activity"] = {"state": "idle"}
+        self.b.store.attach_main("ao:" + first)
+        self.b.deliver_notices_ao(first)
+        self.b.setup_manager = lambda path, project_id=None: (self.store.attach_main("ao:new-1") or
+                                                               {"session": "new-1", "steps": []})
+        res = self.b.manager_reset()
+        self.assertEqual(res["closed"], first)
+        self.assertEqual(self.store.active_main()["session_id"], "ao:new-1")
+        self.assertEqual(len(self.store.questions("open")), 1)       # 상태는 그대로
+        self.ao.sessions_["new-1"] = {"id": "new-1", "projectId": "hub", "role": "orchestrator", "isTerminated": False}
+        self.ao.transcripts["new-1"] = []
+        self.assertEqual(len(self.b.deliver_notices_ao("new-1")), 1)  # 처리 안 된 알림은 새 Manager 에 다시
+
+    def test_reset_with_note_writes_session_handoff(self):
+        self.ao.kill = lambda sid: [o.update(isTerminated=True) for o in self.ao.orchs if o["id"] == sid]
+        t, _, _ = self.assign()
+        r = self.b.sup_report(t["task_id"], "question", "A 인가 B 인가?", worker="w1")
+        self.b.answer(r["question_id"], "A", reason="간단함")
+        first = self.ao.spawn("hub", "Manager Agent", kind="orchestrator")
+        self.ao.sessions_[first]["activity"] = {"state": "idle"}
+        self.store.attach_main("ao:" + first)
+        self.b.setup_manager = lambda path, project_id=None: (self.store.attach_main("ao:new-1") or {"session": "new-1", "steps": []})
+        res = self.b.manager_reset(note="사용자는 시험 저장소 병합을 미루기로 함. 다음엔 실제 저장소 등록.", title="첫 시험")
+        path = res["session_note"]
+        self.assertTrue(path.replace("\\", "/").split("/")[-2] == "세션", path)
+        text = open(path, encoding="utf-8").read()
+        self.assertIn('type: "ao-main-session"', text)
+        self.assertIn("사용자는 시험 저장소 병합을 미루기로 함", text)
+        self.assertIn("[[wiki/tasks/%s]]" % t["task_id"], text)
+        self.assertIn("[[wiki/decisions/%s]]" % r["question_id"], text)
+        row = self.store.db.execute("SELECT value FROM meta WHERE key='last_session_note'").fetchone()
+        self.assertEqual(row["value"], path)
+
+    def test_manager_reset_refuses_while_busy(self):
+        busy = self.ao.spawn("hub", "Manager Agent", kind="orchestrator")
+        self.ao.sessions_[busy]["activity"] = {"state": "active"}
+        with self.assertRaises(ValueError):
+            self.b.manager_reset()
 
     def test_manager_rules_go_to_manager_project(self):
         self.ao.project = lambda pid: {"id": pid, "path": self.repo, "config": {}}

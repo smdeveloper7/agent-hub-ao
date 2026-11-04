@@ -184,6 +184,19 @@ def cmd_sup_report(a):
         print("%s %s 보고를 기록했습니다%s." % (a.task, a.kind, "" if res["new"] else "(이미 받은 보고라 다시 기록하지 않음)"))
 
 
+def cmd_whoami(a):
+    """지금 세션이 허브 Main 인지. 위키 정리 같은 Main 전용 일을 하기 전에 본다."""
+    s = Store()
+    m = s.active_main()
+    mine = [x for x in (os.environ.get("CLAUDE_CODE_SESSION_ID"),
+                        ("ao:" + os.environ["AO_SESSION_ID"]) if os.environ.get("AO_SESSION_ID") else None) if x]
+    res = {"is_main": bool(m and m["session_id"] in mine), "this_session": mine, "main": m["session_id"] if m else None}
+    if not res["is_main"]:
+        res["note"] = "이 세션은 허브 Main 이 아닙니다. 위키 정리와 AO 배정은 Main(AO 앱 Manager Agent 또는 허브 창)에서 하세요."
+    out(res, True)
+    return 0 if res["is_main"] else 3
+
+
 def cmd_tell(a):
     out(Bridge().tell(a.task, a.text), True)
 
@@ -244,6 +257,9 @@ def cmd_resume(a):
                               for q in b.store.questions("open")],
            "unacked_notices": [n["notice_id"] for n in b.store.notices()],
            "notes_to_read": []}
+    row = b.store.db.execute("SELECT value FROM meta WHERE key='last_session_note'").fetchone()
+    if row and os.path.exists(row["value"]):
+        res["notes_to_read"].append(row["value"])  # 이전 Main 대화의 인계 노트를 먼저
     if b.vault.enabled:
         for pid in sorted({t["project_id"] for t in tasks}):
             res["notes_to_read"].append(b.vault.p(b.vault.wiki, "projects", pid + ".md"))
@@ -316,6 +332,17 @@ def watch_ao(a):
             time.sleep(period)
     finally:
         ctx.__exit__(None, None, None)
+
+
+def cmd_session_note(a):
+    out({"session_note": Bridge().write_session_note(a.text, a.title)}, True)
+
+
+def cmd_manager_reset(a):
+    b = Bridge()
+    res = b.manager_reset(force=a.force, note=a.note, title=a.title)
+    res["watcher_started"] = ensure_ao_watcher(res["session"])
+    out(res, True)
 
 
 def cmd_setup_manager(a):
@@ -474,6 +501,8 @@ def build():
     s.add_argument("--event-id", dest="event_id")
     s.set_defaults(fn=cmd_sup_report)
 
+    sub.add_parser("whoami", help="지금 세션이 허브 Main 인지(아니면 종료 코드 3)").set_defaults(fn=cmd_whoami)
+
     s = sub.add_parser("tell", help="같은 작업의 Supervisor 에 후속 지시")
     s.add_argument("task")
     s.add_argument("--text", required=True)
@@ -512,6 +541,17 @@ def build():
     s.add_argument("--name", help="화면 이름(기본 config manager_name)")
     s.add_argument("--project", help="AO 프로젝트 id(기본 config manager_project)")
     s.set_defaults(fn=cmd_setup_manager)
+
+    s = sub.add_parser("session-note", help="지금 Main 대화의 인계 노트를 세션 폴더에 남김(허브 창 /clear 전 등)")
+    s.add_argument("--text", required=True, help="이 대화의 요약")
+    s.add_argument("--title")
+    s.set_defaults(fn=cmd_session_note)
+
+    s = sub.add_parser("manager-reset", help="Manager 세션을 닫고 새로 띄워 대화를 비움(상태는 DB·Vault 에서 이어 감)")
+    s.add_argument("--force", action="store_true", help="Manager 가 일하는 중이어도 비움")
+    s.add_argument("--note", help="비우기 전에 세션 폴더에 남길 이 대화의 요약(사용자 의도·선호·논의·남은 아이디어)")
+    s.add_argument("--title", help="인계 노트 제목 뒤에 붙일 짧은 말")
+    s.set_defaults(fn=cmd_manager_reset)
 
     s = sub.add_parser("watch", help="감시하며 Main inbox 로 알림(Main 세션 안에서)")
     s.add_argument("--ao-main", dest="ao_main", help="Main 이 AO 세션(Manager Agent)일 때 그 세션 id. 알림을 ao send 로 보냄")

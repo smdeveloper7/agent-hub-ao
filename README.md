@@ -112,7 +112,7 @@ python ~/.claude-hub-ao/bin/aohub.py setup-manager --path ~/hub --name "Manager 
 ```
 
 허브 폴더를 git 저장소로 만들고, AO 프로젝트 `hub`(이름 Manager Agent)로 등록하고, Manager 규칙을 넣고, Manager 세션과 감시 프로세스를 띄웁니다. 다시 실행해도 결과가 같습니다.
-이후에는 AO 앱에서 **Manager Agent** 세션을 열어 말합니다. 허브 폴더에서 연 `claude` 창은 비상용으로 남습니다(그 창을 열면 그 창이 Main 을 이어받습니다).
+이후에는 AO 앱에서 **Manager Agent** 세션을 열어 말합니다. 대화가 길어지면 Manager 에게 "대화 비워줘" 라고 합니다. Manager 가 이 대화의 요약을 Obsidian `세션` 폴더에 인계 노트로 남기고 자기 세션을 닫으면, 새 Manager 가 그 노트와 DB 상태로 이어 갑니다(허브 창은 `session-note` 뒤 `/clear`). 허브 폴더에서 연 `claude` 창은 비상용으로 남습니다(그 창을 열면 그 창이 Main 을 이어받습니다).
 
 ## 쓰는 법
 
@@ -182,6 +182,8 @@ Main 이 쓰는 명령은 `/agent-hub-ao:ao` 스킬에 있고, 사용자가 직�
 
 자동으로 고치는 곳은 맡은 Properties 키와 `<!-- aohub:begin … -->` 구역뿐입니다. 그 밖의 본문과 사용자가 더한 Properties 는 그대로 둡니다.
 
+위키(`wiki/`)는 모든 세션이 읽지만 쓰는 것은 허브 Main 만 합니다. `vault_main_only.py` 훅이 Main 이 아닌 세션의 Edit/Write 를 막고, `aohub whoami` 로 지금 세션이 Main 인지 확인합니다. 일지(raw) 한 줄 쓰기는 공통 스크립트로 모든 세션이 계속 씁니다.
+
 ## 시험
 
 ```sh
@@ -231,6 +233,7 @@ Windows 에서 실제 AO 0.14.8 과 Claude Code 2.1.318 로 확인한 것은 다
 | `open_dashboard.py` | 세션 시작 | 허브 폴더에서 열리면 대시보드를 띄우고, `orca` 가 켜져 있으면 Orca 탭으로 엽니다 |
 | `ao_watch_start.py` | 세션 시작 | 허브 폴더에서 열리면 세션 이름을 `hub` 로 붙이고, aohub 가 설정되어 있으면 감시 프로세스를 그 세션에 붙입니다 |
 | `hub_only_write.py` | Edit, Write 직전 | 허브 폴더 밖 세션이 허브 폴더 파일을 고치지 못하게 막습니다 |
+| `vault_main_only.py` | Edit, Write 직전 | Obsidian 위키(`wiki/`)는 허브 Main 세션만 고칩니다. 보기와 일지(raw) 쓰기는 막지 않습니다 |
 | `git-message-style.py` | Bash, PowerShell 직전 | git 커밋·PR 문구가 개조식 규칙을 어기면 막습니다(`CLAUDE_GIT_STYLE=off` 로 잠시 끔) |
 
 | 설정값 | 필수 | 뜻 | 기본값 |

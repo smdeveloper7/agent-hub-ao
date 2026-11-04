@@ -437,6 +437,50 @@ class Vault:
                                                   for q in done_q[-10:]]
         return upsert_note(self.p(self.wiki, "projects", pid + ".md"), pid, owned, [("ao-project", "\n".join(lines))])
 
+    def session_note(self, store, main, summary, title=None):
+        """Main 대화 하나의 인계 노트(세션 폴더). 작업·결정 목록은 DB 에서, 요약은 Main 이 쓴 글로 채운다. 경로를 돌려준다."""
+        if not self.enabled:
+            return None
+        start = main["attached_at"]
+        end = now()
+        evs = store.events(since=start)
+        tids = sorted({e["task_id"] for e in evs if e.get("task_id")})
+        tasks = [t for t in (store.task(x) for x in tids) if t]
+        qs = [q for q in store.questions() if q["created_at"] >= start or (q.get("answered_at") or "") >= start]
+        open_tasks = [t for t in store.tasks(open_only=True)]
+        open_q = store.questions("open")
+        stamp = _dt.datetime.fromisoformat(start).astimezone(KST)
+        name = "Main %s%s" % (stamp.strftime("%Y-%m-%d %H%M"), (" " + title.strip()) if title else "")
+        safe = re.sub(r'[\\/:*?"<>|#^\[\]]', " ", name).strip()
+        sdir = self.cfg.get("session_dir") or "세션"
+        path = self.p(sdir, safe + ".md")
+        days = sorted({start[:10], end[:10]})
+        owned = {"type": "ao-main-session", "main_session": main["session_id"], "started": start, "ended": end,
+                 "tasks": [self.task_link(t["task_id"]) for t in tasks],
+                 "decisions": [self.decision_link(q["question_id"]) for q in qs],
+                 "daily": [self.link(self.raw, d) for d in days], "tags": ["ao/session"]}
+        head = ["허브 Main 대화 하나를 비우기 전에 남긴 인계 노트입니다. 다음 Main 은 `aohub resume` 에서 이 노트를 먼저 읽습니다.", "",
+                "| 항목 | 내용 |", "| --- | --- |",
+                "| 대화 기간 | %s ~ %s |" % (short_time(start), short_time(end)),
+                "| 담당 | 허브 Main `%s` |" % main["session_id"],
+                "| 다룬 작업 | %d건 (남은 작업 %d, 판단 대기 %d) |" % (len(tasks), len(open_tasks), len(open_q)),
+                "| 작업 원본 | %s |" % " · ".join(self.link(self.raw, d) for d in days)]
+        auto = ["## 이 대화에서 다룬 작업", "", "| 작업 | 프로젝트 | 상태 | 검증 |", "| --- | --- | --- | --- |"]
+        auto += ["| %s %s | %s | %s | %s |" % (self.task_link(t["task_id"]), md_cell(t["title"], 60), t["project_id"],
+                                               STATUS_KO.get(t["status"], t["status"]), {1: "통과", 0: "실패"}.get(t.get("verified"), "-"))
+                 for t in tasks] or ["| 없음 | | | |"]
+        auto += ["", "## 결정", ""] + (["- %s %s → %s" % (self.decision_link(q["question_id"]), md_cell(q["text"], 60),
+                                                        md_cell(q.get("answer") or "답 대기", 80)) for q in qs] or ["- 없음"])
+        auto += ["", "## 비울 때 남은 일", ""]
+        auto += ["- %s %s (%s)" % (self.task_link(t["task_id"]), md_cell(t["title"], 60), STATUS_KO.get(t["status"], t["status"]))
+                 for t in open_tasks] or ["- 진행 중 작업 없음"]
+        auto += ["- 판단 대기 %s" % self.decision_link(q["question_id"]) for q in open_q]
+        with file_lock(os.path.join(config.home(), "vault.lock")):
+            upsert_note(path, name, owned, [("session-head", "\n".join(head)),
+                                             ("session-summary", "## 대화 요약 (Main 작성)\n\n" + summary.strip()),
+                                             ("session-auto", "\n".join(auto))])
+        return path
+
     def _base_file(self):
         w = self.wiki
         text = "\n".join([

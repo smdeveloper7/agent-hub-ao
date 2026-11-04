@@ -107,6 +107,9 @@ def manager_rules(cfg):
         "- `[답변]` 과 노트 수정은 도구 권한 승인이 아닙니다. 권한 승인은 사용자가 AO 앱에서 직접 합니다.",
         "- Obsidian 기록과 작업일지는 aohub 가 합니다. \"오늘 작업 정리해줘\" 는 `%s daily` 뒤 Vault 의 위키 정리 규칙을 따릅니다." % cmd,
         "- 다른 프로젝트 저장소 코드를 이 세션에서 직접 고치지 않습니다. 이 프로젝트(허브 폴더)의 문서만 고칩니다.",
+        "- 대화를 쌓아 두지 않습니다. 맡긴 작업이 모두 끝났거나 하루 정리를 마쳤거나 사용자가 '대화 비워줘' 라고 하면, 남은 보고를 먼저 하고",
+        "  사용자에게 알린 뒤 `%s manager-reset --note \"<이 대화 요약: 사용자 의도·선호, 논의한 방향, 남은 아이디어>\"` 을 실행합니다." % cmd,
+        "  요약은 Vault 세션 폴더에 인계 노트로 남고, 이 세션이 닫힌 뒤 새 Manager 가 resume 으로 그 노트부터 읽습니다.",
     ])
 
 
@@ -799,6 +802,43 @@ class Bridge:
             steps.append("Manager 세션 %s 생성" % sid)
         self.store.attach_main("ao:" + sid)
         return {"project": pid, "name": name, "session": sid, "steps": steps}
+
+    def write_session_note(self, summary, title=None):
+        """지금 Main 대화의 인계 노트를 남기고 경로를 기록한다(resume 이 다음 Main 에게 먼저 보여 준다)."""
+        main = self.store.active_main()
+        if not main:
+            raise ValueError("등록된 Main 이 없습니다.")
+        path = self.vault.session_note(self.store, main, summary, title)
+        if path:
+            with self.store.tx() as db:
+                db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)", ("last_session_note", path))
+                db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)",
+                           ("session_note:" + main["session_id"], path))
+            self.store.record_event("session-note:%s" % main["session_id"], "main", "session_note",
+                                    summary="Main 대화 인계 노트: %s" % path)
+        return path
+
+    def manager_reset(self, force=False, note=None, title=None):
+        """Manager 세션을 비운다: 지금 세션을 닫고 새 Manager 를 띄운다. 업무 상태는 DB·Vault 에 있어 새 Manager 가 resume 으로 이어 간다."""
+        pid = self.cfg.get("manager_project") or "hub"
+        live = self._live_orchestrator(pid)
+        old = live["id"] if live else None
+        if old and not force:
+            act = ((self.ao.session(old).get("session") or {}).get("activity") or {})
+            if (act.get("state") if isinstance(act, dict) else act) == "active":
+                raise ValueError("Manager %s 가 일하는 중입니다. 끝난 뒤 다시 하거나 --force 를 주세요." % old)
+        path = (self.ao.project(pid) or {}).get("path")
+        if not path:
+            raise ValueError("Manager 프로젝트 %s 가 없습니다. 먼저 setup-manager 를 실행하세요." % pid)
+        note_path = self.write_session_note(note, title) if note else None
+        if old:
+            self.ao.kill(old)
+            self.store.record_event("manager-reset:%s" % old, "main", "manager_reset", project_id=pid,
+                                    summary="Manager 세션 %s 를 닫고 새로 시작(대화 비우기)" % old)
+        res = self.setup_manager(path, project_id=pid)
+        res["closed"] = old
+        res["session_note"] = note_path
+        return res
 
     def deliver_notices_ao(self, ao_session):
         """Main 이 AO 세션일 때: 알림을 ao send(고정 핸들)로 보내고 transcript 도착을 확인한다."""

@@ -2,7 +2,7 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|resume",
+        "matcher": "startup|resume|clear",
         "hooks": [
           {
             "type": "command",
@@ -34,6 +34,14 @@
             "command": "${user_config.python}",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/hub_only_write.py"
+            ],
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "${user_config.python}",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/vault_main_only.py"
             ],
             "timeout": 10
           }

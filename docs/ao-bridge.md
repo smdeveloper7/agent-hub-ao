@@ -91,6 +91,17 @@ Main Claude Code 세션(허브)이 [Agent Orchestrator](https://github.com/Orche
 | 허브 창 | 허브 폴더에서 연 `claude` | 세션 inbox(named pipe·Unix 소켓) | 그 세션에 붙어 SessionStart 훅이 띄움 |
 | Manager Agent(권장) | AO 프로젝트 `hub` 의 orchestrator 세션 | `ao send --steer`(고정 핸들), transcript 도착 확인 | Manager 의 `resume` 이 떼어 띄움(`watch --ao-main`) |
 
+Main 대화는 쌓아 두지 않고 비우면서 씁니다. 업무 상태(작업, 질문, 결정, 알림)는 상태 DB 와 Vault 에 있고, 새 Main 은 `resume` 으로 진행 중 작업과 관련 노트만 다시 읽습니다.
+
+| 모드 | 비우기 | 비운 뒤 |
+|---|---|---|
+| Manager Agent | `aohub manager-reset --note "<요약>"`(일하는 중이면 거절, `--force` 로 강제). Manager 에게 "대화 비워줘" 라고 해도 됩니다 | 인계 노트를 남기고, 새 Manager 세션이 resume 으로 그 노트부터 읽고 이어 갑니다. 처리 안 된 알림은 새 세션에 다시 갑니다 |
+| 허브 창 | `aohub session-note --text "<요약>"` 뒤 `/clear` | SessionStart 훅(clear)이 감시 프로세스를 새 대화에 다시 붙입니다 |
+
+인계 노트는 Vault 의 `세션/Main <시작 시각> <제목>.md` 입니다. 그 대화에서 다룬 작업·결정·남은 일은 aohub 가 채우고, DB 와 노트에 없는 맥락(사용자 의도와 선호, 논의한 방향, 남은 아이디어)은 Main 이 요약으로 씁니다. `resume` 은 가장 최근 인계 노트를 읽을 노트 맨 앞에 둡니다.
+
+비우기 좋은 때: 맡긴 작업이 모두 끝났을 때, "오늘 작업 정리해줘" 뒤, 대화가 길어져 응답이 느려질 때.
+
 Main 은 늘 하나입니다. 마지막에 `resume` 하거나 열린 쪽이 Main 을 이어받고, 이전 감시 프로세스는 스스로 멈춥니다.
 Manager 프로젝트에는 `aohub assign` 으로 일을 맡기지 않습니다. `setup-manager` 가 프로젝트 등록, 규칙, 세션을 준비합니다.
 
@@ -112,6 +123,9 @@ Manager 프로젝트에는 `aohub assign` 으로 일을 맡기지 않습니다. 
 | `notices`, `ack <N>` | Main | Main 에 보낸 알림, 처리 기록 |
 | `watch` | Main 세션 안 | 주기적으로 AO 를 읽고 알림을 Main inbox 로 보냄. `--ao-main <세션>` 이면 Manager 에 ao send |
 | `setup-manager --path --name` | 처음 한 번 | 허브 폴더를 AO 프로젝트로 등록하고 Manager Agent 세션과 감시 프로세스 준비 |
+| `manager-reset [--note] [--title] [--force]` | Main | Manager 대화 비우기: 인계 노트를 남기고 지금 세션을 닫고 새 Manager 를 띄움 |
+| `session-note --text` | Main | 지금 Main 대화의 인계 노트를 세션 폴더에 남김(허브 창 `/clear` 전) |
+| `whoami` | 누구나 | 지금 세션이 허브 Main 인지(아니면 종료 코드 3) |
 | `resume` | Main | 재시작 뒤 Main 등록, 진행 중 작업·질문·알림, 읽을 노트 |
 | `poll`, `sync`, `daily` | Main | 한 번 읽기, 노트 다시 그리기, 오늘 정리와 `wiki/log.md` 한 줄 |
 | `sup-report --task --kind worker\|progress\|question\|done\|blocked` | Supervisor | Main 으로 가는 유일한 통로. DB 에만 쓴다 |
@@ -147,11 +161,13 @@ AO 의 `idle` 은 turn 실패도 포함합니다. 감시 프로세스는 idle Wo
 | `wiki/decisions/<질문 ID>.md` | 질문, 선택지, 경로(Worker→Supervisor→Main), 답, 이유, 전달 확인 |
 | `wiki/projects/<프로젝트>.md` | AO 작업 표, 판단 대기, 최근 결정. 기존 노트면 자동 구역만 덧붙임 |
 | `wiki/AO 현황.base` | Bases 보기: 프로젝트 현황, 판단 대기, 완료 작업, 결정 기록 |
+| `세션/Main <시각> <제목>.md` | Main 대화 하나의 인계 노트(대화 비우기 전) |
 | `wiki/index.md` | `ao-index` 자동 구역(보기와 프로젝트 링크) |
 | `wiki/log.md` | `aohub daily` 가 한 줄 덧붙임 |
 
 - 자동으로 고치는 곳은 맡은 Properties 키와 `<!-- aohub:begin 이름 -->` ~ `<!-- aohub:end 이름 -->` 사이뿐입니다. 사용자가 더한 Properties 와 본문 메모는 그대로 둡니다.
 - 노트의 상태나 체크박스를 바꿔도 실행 승인이나 작업 재개가 일어나지 않습니다. 답은 Main 에서 받습니다.
+- 위키(`wiki/`) 쓰기는 허브 Main 만 합니다. `hooks/vault_main_only.py` 가 Main 이 아닌 세션의 Edit/Write 를 막습니다. Main 은 aohub 에 등록된 세션(허브 창 Claude 세션 id 또는 `ao:<Manager AO 세션>`)입니다. 일지(raw)는 막지 않습니다.
 - Obsidian 앱 제어(공식 CLI `Obsidian.com`)는 쓰지 않습니다. 로컬 Markdown 읽기·쓰기만으로 충분했습니다.
 
 ## 재시작·오류·질문 대기

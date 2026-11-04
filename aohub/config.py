@@ -33,6 +33,8 @@ DEFAULTS = {
     # Main 을 AO 프로젝트의 orchestrator 로 쓸 때(Manager Agent): 그 프로젝트 id 와 화면 이름.
     "manager_project": "hub",
     "manager_name": "Manager Agent",
+    # Main 대화를 비우기 전에 남기는 인계 노트 폴더(Vault 기준).
+    "session_dir": "세션",
     # Supervisor 가 스스로 처리하는 오류 기준. Supervisor 규칙(orchestratorRules)과 배정 메시지에 들어간다.
     # 기준에 없는 오류, 재시도를 다 쓴 오류, 권한·설정·범위 변경은 Supervisor 가 blocked/question 으로 Main 에 올린다.
     "error_policy": {
