@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agent-hub-ao 구성</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Noto+Sans+KR:wght@500;600&family=Noto+Serif+KR&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #2d3142; color: #f5f5f5; font-family: 'Geist', 'Noto Sans KR', sans-serif; padding: 2.5rem 2rem 2rem; }
+.frame { max-width: 1000px; margin: 0 auto; }
+.eyebrow { font-family: 'Geist Mono', monospace; font-size: 0.66rem; letter-spacing: 0.18em; text-transform: uppercase; color: #bfc0c0; margin-bottom: 0.5rem; }
+h1 { font-family: 'Instrument Serif', 'Noto Serif KR', serif; font-weight: 400; font-size: 2rem; margin-bottom: 1.25rem; }
+figure svg { width: 100%; height: auto; display: block; }
+figcaption { margin-top: 0.75rem; font-size: 0.82rem; line-height: 1.6; color: #bfc0c0; }
+</style>
+</head>
+<body>
+<div class="frame">
+<p class="eyebrow">Architecture / agent-hub-ao</p>
+<h1>agent-hub-ao 구성</h1>
+<figure>
+<svg viewBox="0 38 1000 454" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="사용자는 Manager Agent 와 대화하고 Obsidian 으로 현황을 봅니다. Manager 는 AO CLI 로 프로젝트별 Supervisor 에 맡기고, Supervisor 는 Worker 를 띄웁니다. Supervisor 보고와 감시 프로세스가 읽고 직접 검증한 결과가 상태 DB 에 쌓이고, 알림은 ao send 로 Manager 에게, 기록은 Obsidian 노트로 갑니다.">
+<defs>
+<pattern id="ao-architecture-dark-dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(245,245,245,0.1)"/></pattern>
+<marker id="ao-architecture-dark-arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#949eb2"/></marker>
+<marker id="ao-architecture-dark-arr-s" markerWidth="8" markerHeight="6" refX="1" refY="3" orient="auto"><polygon points="8 0, 0 3, 8 6" fill="#949eb2"/></marker>
+<marker id="ao-architecture-dark-acc" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#f08a59"/></marker>
+<marker id="ao-architecture-dark-acc-s" markerWidth="8" markerHeight="6" refX="1" refY="3" orient="auto"><polygon points="8 0, 0 3, 8 6" fill="#f08a59"/></marker>
+</defs>
+<rect width="1000" height="500" fill="#2d3142"/>
+<rect width="1000" height="500" fill="url(#ao-architecture-dark-dots)" opacity="0.55"/>
+<rect x="222" y="58" width="756" height="174" rx="10" fill="rgba(245,245,245,0.03)" stroke="rgba(245,245,245,0.14)" stroke-width="0.9"/>
+<rect x="236" y="52" width="156.4" height="12" rx="2" fill="#2d3142"/>
+<text x="314.2" y="61.5" fill="#bfc0c0" font-size="7.5" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">AGENT ORCHESTRATOR · AO 데몬</text>
+<rect x="222" y="300" width="756" height="132" rx="10" fill="rgba(245,245,245,0.03)" stroke="rgba(245,245,245,0.14)" stroke-width="0.9"/>
+<rect x="236" y="294" width="226.60000000000002" height="12" rx="2" fill="#2d3142"/>
+<text x="349.3" y="303.5" fill="#bfc0c0" font-size="7.5" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">AGENT-HUB-AO · aohub · ~/.claude-hub-ao</text>
+<path d="M 182,132 H 248" fill="none" stroke="#f08a59" stroke-width="1.5" marker-end="url(#ao-architecture-dark-acc)" marker-start="url(#ao-architecture-dark-acc-s)"/>
+<path d="M 106,162 V 330" fill="none" stroke="#949eb2" stroke-width="1.4" marker-end="url(#ao-architecture-dark-arr)" marker-start="url(#ao-architecture-dark-arr-s)"/>
+<path d="M 160,330 V 214 Q 160,206 168,206 H 312 Q 320,206 320,198 V 172" fill="none" stroke="#949eb2" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#ao-architecture-dark-arr)"/>
+<path d="M 442,120 H 518" fill="none" stroke="#f08a59" stroke-width="1.5" marker-end="url(#ao-architecture-dark-acc)"/>
+<path d="M 711,116 H 778" fill="none" stroke="#949eb2" stroke-width="1.2" marker-end="url(#ao-architecture-dark-arr)"/>
+<path d="M 778,146 H 712" fill="none" stroke="#949eb2" stroke-width="1.2" marker-end="url(#ao-architecture-dark-arr)"/>
+<path d="M 612,170 V 330" fill="none" stroke="#949eb2" stroke-width="1.2" marker-end="url(#ao-architecture-dark-arr)"/>
+<path d="M 870,172 V 330" fill="none" stroke="#949eb2" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#ao-architecture-dark-arr)"/>
+<path d="M 778,368 H 702" fill="none" stroke="#949eb2" stroke-width="1.2" marker-end="url(#ao-architecture-dark-arr)"/>
+<path d="M 518,368 H 442" fill="none" stroke="#949eb2" stroke-width="1.2" marker-end="url(#ao-architecture-dark-arr)"/>
+<path d="M 248,368 H 182" fill="none" stroke="#949eb2" stroke-width="1.2" marker-end="url(#ao-architecture-dark-arr)"/>
+<path d="M 806,330 V 276 Q 806,268 798,268 H 418 Q 410,268 410,260 V 172" fill="none" stroke="#2d3142" stroke-width="7"/>
+<path d="M 806,330 V 276 Q 806,268 798,268 H 418 Q 410,268 410,260 V 172" fill="none" stroke="#f08a59" stroke-width="1.5" marker-end="url(#ao-architecture-dark-acc)"/>
+<rect x="30" y="104" width="150" height="58" rx="6" fill="#2d3142"/>
+<rect x="30" y="104" width="150" height="58" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+<rect x="42" y="114" width="32.4" height="13" rx="2" fill="none" stroke="#bfc0c0" stroke-opacity="0.5" stroke-width="0.8"/>
+<text x="58.2" y="123.5" fill="#bfc0c0" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">USER</text>
+<text x="105.0" y="141.0" fill="#f5f5f5" font-size="14" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="600">사용자</text>
+<text x="105.0" y="158.0" fill="#bfc0c0" font-size="9.5" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">AO 앱 · Obsidian</text>
+<rect x="248" y="96" width="194" height="74" rx="6" fill="#2d3142"/>
+<rect x="248" y="96" width="194" height="74" rx="6" fill="rgba(240,138,89,0.10)" stroke="#f08a59" stroke-width="1.3"/>
+<rect x="260" y="106" width="32.4" height="13" rx="2" fill="none" stroke="#f08a59" stroke-opacity="0.5" stroke-width="0.8"/>
+<text x="276.2" y="115.5" fill="#f08a59" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">MAIN</text>
+<text x="345.0" y="141.0" fill="#f5f5f5" font-size="14" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="600">Manager Agent</text>
+<text x="345.0" y="158.0" fill="#bfc0c0" font-size="9.5" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">AO 프로젝트 hub</text>
+<rect x="525" y="89" width="184" height="74" rx="6" fill="#393e53" stroke="#949eb2" stroke-width="1" opacity="0.55"/>
+<rect x="518" y="96" width="184" height="74" rx="6" fill="#2d3142"/>
+<rect x="518" y="96" width="184" height="74" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+<rect x="530" y="106" width="66.0" height="13" rx="2" fill="none" stroke="#bfc0c0" stroke-opacity="0.5" stroke-width="0.8"/>
+<text x="563.0" y="115.5" fill="#bfc0c0" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">SUPERVISOR</text>
+<text x="610.0" y="141.0" fill="#f5f5f5" font-size="14" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="600">Supervisor</text>
+<text x="610.0" y="158.0" fill="#bfc0c0" font-size="9.5" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">프로젝트마다 하나</text>
+<rect x="785" y="89" width="184" height="74" rx="6" fill="#393e53" stroke="#949eb2" stroke-width="1" opacity="0.55"/>
+<rect x="778" y="96" width="184" height="74" rx="6" fill="#2d3142"/>
+<rect x="778" y="96" width="184" height="74" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+<rect x="790" y="106" width="43.599999999999994" height="13" rx="2" fill="none" stroke="#bfc0c0" stroke-opacity="0.5" stroke-width="0.8"/>
+<text x="811.8" y="115.5" fill="#bfc0c0" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">WORKER</text>
+<text x="870.0" y="141.0" fill="#f5f5f5" font-size="14" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="600">Coding Worker</text>
+<text x="870.0" y="158.0" fill="#bfc0c0" font-size="9.5" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">Claude Code · Codex</text>
+<rect x="30" y="332" width="150" height="72" rx="6" fill="#2d3142"/>
+<rect x="30" y="332" width="150" height="72" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+<rect x="42" y="342" width="54.8" height="13" rx="2" fill="none" stroke="#bfc0c0" stroke-opacity="0.5" stroke-width="0.8"/>
+<text x="69.4" y="351.5" fill="#bfc0c0" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">OBSIDIAN</text>
+<text x="105.0" y="376.0" fill="#f5f5f5" font-size="14" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="600">Obsidian Vault</text>
+<text x="105.0" y="393.0" fill="#bfc0c0" font-size="9.5" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">raw · wiki · 세션</text>
+<rect x="248" y="332" width="194" height="72" rx="6" fill="#2d3142"/>
+<rect x="248" y="332" width="194" height="72" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+<rect x="260" y="342" width="43.599999999999994" height="13" rx="2" fill="none" stroke="#bfc0c0" stroke-opacity="0.5" stroke-width="0.8"/>
+<text x="281.8" y="351.5" fill="#bfc0c0" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">RECORD</text>
+<text x="345.0" y="376.0" fill="#f5f5f5" font-size="14" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="600">기록 모듈</text>
+<text x="345.0" y="393.0" fill="#bfc0c0" font-size="9.5" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">DB → 노트 다시 그리기</text>
+<rect x="518" y="332" width="184" height="72" rx="6" fill="#2d3142"/>
+<rect x="518" y="332" width="184" height="72" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+<rect x="530" y="342" width="38.0" height="13" rx="2" fill="none" stroke="#bfc0c0" stroke-opacity="0.5" stroke-width="0.8"/>
+<text x="549.0" y="351.5" fill="#bfc0c0" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">STATE</text>
+<text x="610.0" y="376.0" fill="#f5f5f5" font-size="14" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="600">상태 DB</text>
+<text x="610.0" y="393.0" fill="#bfc0c0" font-size="9.5" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">작업·질문·결정·알림</text>
+<rect x="778" y="332" width="184" height="72" rx="6" fill="#2d3142"/>
+<rect x="778" y="332" width="184" height="72" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+<rect x="790" y="342" width="38.0" height="13" rx="2" fill="none" stroke="#bfc0c0" stroke-opacity="0.5" stroke-width="0.8"/>
+<text x="809.0" y="351.5" fill="#bfc0c0" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">WATCH</text>
+<text x="870.0" y="376.0" fill="#f5f5f5" font-size="14" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="600">감시 프로세스</text>
+<text x="870.0" y="393.0" fill="#bfc0c0" font-size="9.5" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">aohub watch</text>
+<rect x="198.5" y="112" width="33.0" height="16" rx="2" fill="#2d3142"/>
+<text x="215" y="124" fill="#f08a59" font-size="12" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="500">대화</text>
+<rect x="446.25" y="100" width="67.5" height="16" rx="2" fill="#2d3142"/>
+<text x="480" y="112" fill="#f08a59" font-size="12" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="500">배정·답변</text>
+<rect x="453.3" y="128" width="53.4" height="16" rx="2" fill="#2d3142"/>
+<text x="480" y="140" fill="#f08a59" font-size="10" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">ao send</text>
+<rect x="714.2" y="96" width="59.6" height="16" rx="2" fill="#2d3142"/>
+<text x="744" y="108" fill="#949eb2" font-size="10" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">ao spawn</text>
+<rect x="711.1" y="152" width="65.80000000000001" height="16" rx="2" fill="#2d3142"/>
+<text x="744" y="164" fill="#949eb2" font-size="10" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">ao report</text>
+<rect x="616.0" y="242" width="72.0" height="16" rx="2" fill="#2d3142"/>
+<text x="652" y="254" fill="#949eb2" font-size="10" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">sup-report</text>
+<rect x="418.75" y="278" width="182.5" height="16" rx="2" fill="#2d3142"/>
+<text x="510" y="290" fill="#f08a59" font-size="12" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="500">알림·질문 (ao send)</text>
+<rect x="884.0" y="242" width="64" height="16" rx="2" fill="#2d3142"/>
+<text x="916" y="254" fill="#949eb2" font-size="12" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="500">읽기·검증</text>
+<rect x="717.75" y="348" width="44.5" height="16" rx="2" fill="#2d3142"/>
+<text x="740" y="360" fill="#949eb2" font-size="12" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="500">이벤트</text>
+<rect x="440.5" y="348" width="79.0" height="16" rx="2" fill="#2d3142"/>
+<text x="480" y="360" fill="#949eb2" font-size="12" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="500">다시 그리기</text>
+<rect x="198.5" y="348" width="33.0" height="16" rx="2" fill="#2d3142"/>
+<text x="215" y="360" fill="#949eb2" font-size="12" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="500">노트</text>
+<rect x="189.0" y="188" width="102.0" height="16" rx="2" fill="#2d3142"/>
+<text x="240" y="200" fill="#949eb2" font-size="12" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="middle" font-weight="500">노트·메모 읽기</text>
+<text x="98" y="238" fill="#949eb2" font-size="12" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="end" font-weight="500">현황 보기</text>
+<text x="98" y="254" fill="#949eb2" font-size="12" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="end" font-weight="500">메모</text>
+<line x1="230" y1="470" x2="262" y2="470" stroke="#f08a59" stroke-width="1.5"/>
+<text x="270" y="474" fill="#bfc0c0" font-size="11" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="start">Manager 를 오가는 흐름(대화, 배정, 알림)</text>
+<line x1="540" y1="470" x2="572" y2="470" stroke="#949eb2" stroke-width="1.2"/>
+<text x="580" y="474" fill="#bfc0c0" font-size="11" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="start">명령·기록</text>
+<line x1="680" y1="470" x2="712" y2="470" stroke="#949eb2" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="720" y="474" fill="#bfc0c0" font-size="11" font-family="'Geist', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" text-anchor="start">읽기</text>
+</svg>
+<figcaption>사용자는 Manager Agent 와 대화하고 Obsidian 으로 현황을 봅니다. Manager 는 AO CLI 로 프로젝트별 Supervisor 에 맡기고, Supervisor 는 Worker 를 띄웁니다. Supervisor 보고와 감시 프로세스가 읽고 직접 검증한 결과가 상태 DB 에 쌓이고, 알림은 ao send 로 Manager 에게, 기록은 Obsidian 노트로 갑니다.</figcaption>
+</figure>
+</div>
+</body>
+</html>

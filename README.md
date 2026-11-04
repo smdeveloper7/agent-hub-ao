@@ -4,21 +4,13 @@
 
 [holiday0726/claude-hub-plugin](https://github.com/holiday0726/claude-hub-plugin)(agent-hub)의 허브 운영 규칙, 배정·보고 형식, 작업 ID, 결정 기록, 대시보드를 그대로 쓰고 AO 연동과 Obsidian 기록을 더했습니다. AO 자체를 다시 만들거나 Main 을 다른 앱으로 바꾸지 않고, Claude Code 플러그인이 AO CLI 를 부릅니다.
 
-```mermaid
-flowchart TB
-    U[사용자] <-->|"대화 (AO 앱)"| M["Main = Manager Agent<br/>(AO 프로젝트 hub 의 orchestrator)"]
-    M <-->|"배정·답변·지시 (aohub → ao send)"| S["AO 프로젝트별 Supervisor<br/>(orchestrator 세션)"]
-    S <-->|"ao spawn · ao send · ao report"| W["Coding Workers<br/>Claude Code · Codex"]
-    S -->|"sup-report (작업 ID)"| D[(상태 DB<br/>~/.claude-hub-ao)]
-    WT["aohub watch<br/>(감시 프로세스)"] -->|AO 상태·보고 다시 읽기, 직접 검증| D
-    WT -->|"[AO 알림]·[AO 질문] (ao send)"| M
-    M -->|업무 요약·사용자 결정| D
-    D --> R[기록 모듈] -->|Markdown| V[(Obsidian Vault)]
-    V -.->|관련 프로젝트·결정·인계 노트 참조| M
-    U -.->|현황 확인·메모| V
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/ao-architecture-dark.png">
+  <img alt="agent-hub-ao 구성도: 사용자는 Manager Agent 와 대화하고 Obsidian 으로 현황을 보고 메모합니다. Manager 는 ao send 로 프로젝트별 Supervisor 에 배정·답변하고, Supervisor 는 ao spawn 으로 Claude Code·Codex Worker 를 띄우고 ao report 로 보고받습니다. Supervisor 는 sup-report 로, 감시 프로세스는 AO 를 읽고 직접 검증한 결과로 상태 DB 에 쓰고, 감시 프로세스가 알림·질문을 ao send 로 Manager 에 보냅니다. 기록 모듈이 상태 DB 를 Obsidian 노트로 다시 그리고 Manager 는 그 노트와 메모를 읽습니다." src="docs/images/ao-architecture.png" width="900">
+</picture>
 
 Main 은 AO 앱의 **Manager Agent** 세션이 기본입니다. 허브 폴더에서 연 `claude` 창도 Main 이 될 수 있습니다(비상용, 알림은 세션 inbox 로).
+그림 원본은 [docs/diagrams/ao_architecture.py](docs/diagrams/ao_architecture.py) 입니다.
 
 ## 역할
 
