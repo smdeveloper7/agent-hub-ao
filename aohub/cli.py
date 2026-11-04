@@ -11,7 +11,7 @@ import os
 import sys
 import time
 
-from . import config, inbox
+from . import config, inbox, launcher
 from .ao import AO, AOError
 from .bridge import Bridge, aohub_cmd
 from .store import KST, Store, now
@@ -225,9 +225,15 @@ def cmd_sync(a):
 def cmd_resume(a):
     """Main 이 새로 열렸을 때: 이 세션을 Main 으로 등록하고, 진행 중 작업과 미처리 질문·알림을 AO 에 다시 확인해 보여 준다."""
     b = Bridge()
-    sid = os.environ.get("CLAUDE_CODE_SESSION_ID")
-    if sid:
-        b.store.attach_main(sid, pid=int(os.environ["CLAUDE_PID"]) if os.environ.get("CLAUDE_PID") else None)
+    ao_sid = os.environ.get("AO_SESSION_ID")
+    if ao_sid:  # Manager Agent: Main 이 AO 세션이다. 알림은 ao send 로 받는다
+        sid = "ao:" + ao_sid
+        b.store.attach_main(sid)
+        ensure_ao_watcher(ao_sid)
+    else:
+        sid = os.environ.get("CLAUDE_CODE_SESSION_ID")
+        if sid:
+            b.store.attach_main(sid, pid=int(os.environ["CLAUDE_PID"]) if os.environ.get("CLAUDE_PID") else None)
     try:
         b.poll_once(auto_verify=False)
     except AOError as e:
@@ -245,9 +251,77 @@ def cmd_resume(a):
             if q["task_id"] in {t["task_id"] for t in tasks} or q["status"] != "open":
                 res["notes_to_read"].append(b.vault.p(b.vault.wiki, "decisions", q["question_id"] + ".md"))
     m = b.store.active_main()
+    if ao_sid:
+        time.sleep(2)
+        m = b.store.active_main()
     res["watcher_running"] = bool(m and m["session_id"] == sid and pid_alive(m.get("watcher_pid")))
-    if not res["watcher_running"]:
+    if not res["watcher_running"] and not ao_sid:
         res["next"] = "감시 프로세스를 이 세션에서 백그라운드로 시작하세요: %s watch" % aohub_cmd(b.cfg)
+    out(res, True)
+
+
+def ao_watch_lock(ao_sid):
+    return os.path.join(config.home(), "locks", "watch-ao-%s.lock" % ao_sid)
+
+
+def ensure_ao_watcher(ao_sid):
+    """Manager(AO 세션)용 감시 프로세스가 없으면 떼어 띄운다. 세션과 따로 살아서 알림을 ao send 로 보낸다."""
+    try:
+        with file_lock(ao_watch_lock(ao_sid), timeout=0.3):
+            pass
+    except TimeoutError:
+        return False  # 이미 돈다
+    env = dict(os.environ)
+    for k in ("CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_PID"):
+        env.pop(k, None)
+    launcher.spawn_detached(launcher.self_cmd("watch", "--ao-main", ao_sid), env=env,
+                            log=os.path.join(config.home(), "logs", "watch-stdout.log"))
+    return True
+
+
+def watch_ao(a):
+    ao_sid = a.ao_main
+    main_id = "ao:" + ao_sid
+    try:
+        ctx = file_lock(ao_watch_lock(ao_sid), timeout=1)
+        ctx.__enter__()
+    except TimeoutError:
+        print("이 Manager 세션의 감시 프로세스가 이미 실행 중입니다.")
+        return 0
+    b = Bridge()
+    m = b.store.active_main()
+    if not m or m["session_id"] != main_id:
+        b.store.attach_main(main_id)
+    b.store.attach_main(main_id, watcher_pid=os.getpid())
+    log_line("watch start manager=%s pid=%s (ao send)" % (ao_sid, os.getpid()))
+    period = float(a.interval or b.cfg.get("poll_seconds") or 5)
+    end = time.time() + a.max_seconds if a.max_seconds else None
+    try:
+        while True:
+            m = b.store.active_main()
+            if not m or m["session_id"] != main_id:
+                log_line("watch stop: 다른 Main 이 등록됨 (%s)" % (m or {}).get("session_id"))
+                return 0
+            try:
+                n = b.poll_once(auto_verify=True)
+                sess = (b.ao.session(ao_sid).get("session") or {})
+                sent = [] if sess.get("isTerminated") else b.deliver_notices_ao(ao_sid)
+                b.store.touch_main(main_id)
+                if n or sent:
+                    log_line("poll new=%d sent=%s" % (n, ",".join(sent)))
+            except (AOError, OSError) as e:
+                log_line("poll 오류: %s" % e)
+            if end and time.time() > end:
+                return 0
+            time.sleep(period)
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def cmd_setup_manager(a):
+    b = Bridge()
+    res = b.setup_manager(a.path, a.name, a.project)
+    res["watcher_started"] = ensure_ao_watcher(res["session"])
     out(res, True)
 
 
@@ -259,7 +333,10 @@ def log_line(msg):
 
 
 def cmd_watch(a):
-    """Main 세션 안에서 시작한다. AO 를 주기적으로 읽고, 알림을 Main inbox 로 보낸다."""
+    """Main 세션 안에서 시작한다. AO 를 주기적으로 읽고, 알림을 Main inbox 로 보낸다.
+    --ao-main <AO 세션 id> 면 Manager(AO 세션)용으로 돌고 알림을 ao send 로 보낸다."""
+    if getattr(a, "ao_main", None):
+        return watch_ao(a)
     sid = os.environ.get("CLAUDE_CODE_SESSION_ID")
     if not sid or not inbox.available():
         print("Main Claude Code 세션 안에서 실행해야 합니다(CLAUDE_CODE_SESSION_ID, CLAUDE_CODE_MESSAGING_SOCKET/TOKEN 필요).")
@@ -430,7 +507,14 @@ def build():
     sub.add_parser("sync", help="Obsidian 노트 다시 그리기").set_defaults(fn=cmd_sync)
     sub.add_parser("resume", help="Main 재시작 뒤 복구").set_defaults(fn=cmd_resume)
 
+    s = sub.add_parser("setup-manager", help="허브 폴더를 AO 프로젝트로 등록하고 Manager Agent(Main) 세션을 띄움")
+    s.add_argument("--path", required=True, help="허브 폴더")
+    s.add_argument("--name", help="화면 이름(기본 config manager_name)")
+    s.add_argument("--project", help="AO 프로젝트 id(기본 config manager_project)")
+    s.set_defaults(fn=cmd_setup_manager)
+
     s = sub.add_parser("watch", help="감시하며 Main inbox 로 알림(Main 세션 안에서)")
+    s.add_argument("--ao-main", dest="ao_main", help="Main 이 AO 세션(Manager Agent)일 때 그 세션 id. 알림을 ao send 로 보냄")
     s.add_argument("--interval", type=float)
     s.add_argument("--max-seconds", dest="max_seconds", type=float)
     s.set_defaults(fn=cmd_watch)
@@ -449,6 +533,10 @@ def main(argv=None):
     except (AttributeError, ValueError):
         pass
     a = build().parse_args(argv)
+    try:
+        launcher.ensure()
+    except OSError:
+        pass
     try:
         rc = a.fn(a)
     except (AOError, ValueError) as e:

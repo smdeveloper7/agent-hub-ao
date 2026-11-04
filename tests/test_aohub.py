@@ -246,6 +246,36 @@ class ReportTest(Base):
         self.assertFalse(self.store.claim_notice_send(n["notice_id"], "main-3"))
 
 
+class ManagerTest(Base):
+    """Main 을 AO 프로젝트 hub 의 orchestrator(Manager Agent)로 쓸 때."""
+
+    def test_manager_project_is_not_assignable(self):
+        with self.assertRaises(ValueError):
+            self.assign(project_id="hub")
+
+    def test_notices_go_to_manager_by_ao_send_once(self):
+        t, _, _ = self.assign()
+        self.b.sup_report(t["task_id"], "question", "A 인가 B 인가?", worker="w1", options=["A", "B"])
+        mgr = self.ao.spawn("hub", "Manager Agent", kind="orchestrator")
+        self.store.attach_main("ao:" + mgr)
+        sent = self.b.deliver_notices_ao(mgr)
+        again = self.b.deliver_notices_ao(mgr)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(again, [])
+        bodies = [b for s, b, _ in self.ao.sent if s == mgr]
+        self.assertEqual(len(bodies), 1)
+        self.assertTrue(bodies[0].startswith("[AO 질문] %s ·" % sent[0]))
+        self.assertIn("bin/aohub.py", bodies[0])  # 판이 바뀌어도 그대로인 고정 실행 파일
+
+    def test_manager_rules_go_to_manager_project(self):
+        self.ao.project = lambda pid: {"id": pid, "path": self.repo, "config": {}}
+        captured = {}
+        self.ao.set_config = lambda pid, obj: captured.update({pid: obj})
+        self.b.ensure_project_rules("hub")
+        self.assertIn("Manager Agent", captured["hub"]["orchestratorRules"])
+        self.assertNotIn("Supervisor 가 먼저 잡는다", captured["hub"]["orchestratorRules"])
+
+
 class ReviewTest(Base):
     """검증 명령이 없는 일(문서, 조사)은 사용자 확인으로 끝낸다."""
 

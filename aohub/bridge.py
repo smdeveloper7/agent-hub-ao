@@ -16,7 +16,7 @@ import os
 import subprocess
 import time
 
-from . import config, inbox
+from . import config, inbox, launcher
 from .ao import AO, AOError
 from .store import Store, now
 from .vault import Vault
@@ -25,8 +25,8 @@ SUP_KINDS = ("worker", "progress", "question", "done", "blocked")
 
 
 def aohub_cmd(cfg):
-    script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "aohub.py")
-    return '"%s" "%s"' % (config.python_bin(cfg), script.replace("\\", "/"))
+    """규칙·배정·알림에 적는 aohub 명령. 플러그인 판이 바뀌어도 그대로인 고정 실행 파일을 가리킨다."""
+    return launcher.command(cfg)
 
 
 def short_hash(*parts):
@@ -85,6 +85,31 @@ def supervisor_rules(cfg):
     ] + error_rules(cfg))
 
 
+def manager_rules(cfg):
+    """Main 을 AO 프로젝트(manager_project)의 orchestrator 로 쓸 때 그 프로젝트 orchestratorRules 에 넣는 규칙."""
+    cmd = aohub_cmd(cfg)
+    return "\n".join([
+        "## Manager Agent (Main 허브)",
+        "",
+        "이 세션은 사용자가 대화하는 Main(허브)입니다. 이름은 %s 입니다. 위의 AO 기본 지시는 '이 프로젝트 안' 기준입니다." % cfg.get("manager_name"),
+        "이 세션은 이 프로젝트에서 AO worker 를 띄우지 않고, 다른 AO 프로젝트의 Supervisor 에게 일을 맡겨 결과·질문·결정을 관리합니다.",
+        "운영 규칙 원문은 agent-hub-ao 플러그인의 `ao` 스킬(`/agent-hub-ao:ao`)입니다. 스킬이 안 보이면 아래 요약을 따릅니다.",
+        "",
+        "- 세션을 열거나 이어서 시작하면 먼저 `%s resume` 을 실행합니다. 진행 중 작업(AO 재확인), 미처리 질문·알림, 읽을 노트가 나옵니다." % cmd,
+        "  notes_to_read 의 프로젝트·결정 노트를 읽고 이전 결정과 이유를 이어 갑니다.",
+        "- 배정: `%s projects` 로 프로젝트를 보고, 완료 조건을 정해 `%s assign --project <id> --title \"…\" --request \"…\" --done \"…\" [--verify \"…\"] [--worker-agent codex]`." % (cmd, cmd),
+        "  실행해 확인할 명령이 없는 일은 --verify 를 빼고 완료 조건에 볼 결과물을 적습니다.",
+        "- 감시 프로세스가 `[AO 알림] N-…`, `[AO 질문] N-…` 을 이 세션에 보냅니다. 사용자에게 알기 쉽게 보고하고 `%s ack <N-ID>` 를 실행합니다." % cmd,
+        "  현재 상태는 `%s status <작업 ID>` 로 AO 에 다시 묻습니다. 완료 검증 통과(Main 직접 확인)와 보고만 받은 내용을 섞지 않습니다." % cmd,
+        "- 질문은 사용자 대신 정하지 않습니다. 선택지를 그대로 묻고, 답과 이유를 `%s answer <Q-ID> --text \"…\" --reason \"…\"` 로 전달·기록합니다." % cmd,
+        "- 확인 필요(검증 명령 없는 작업)는 결과물을 보여 주고 사용자가 확인하면 `%s accept <작업 ID> --note \"…\"`, 고칠 점은 `%s tell <작업 ID> --text \"…\"`." % (cmd, cmd),
+        "- Worker 실행 실패·시험 실패 같은 기준 있는 오류는 각 Supervisor 가 처리합니다. blocked 알림만 사용자에게 원인과 선택지를 보여 결정을 받습니다.",
+        "- `[답변]` 과 노트 수정은 도구 권한 승인이 아닙니다. 권한 승인은 사용자가 AO 앱에서 직접 합니다.",
+        "- Obsidian 기록과 작업일지는 aohub 가 합니다. \"오늘 작업 정리해줘\" 는 `%s daily` 뒤 Vault 의 위키 정리 규칙을 따릅니다." % cmd,
+        "- 다른 프로젝트 저장소 코드를 이 세션에서 직접 고치지 않습니다. 이 프로젝트(허브 폴더)의 문서만 고칩니다.",
+    ])
+
+
 def assignment_message(cfg, t):
     cmd = aohub_cmd(cfg)
     agent = t.get("worker_agent")
@@ -119,12 +144,16 @@ class Bridge:
         self.confirm_seconds = 45
 
     # ------------------------------------------------------------ Supervisor
+    def is_manager_project(self, project_id):
+        return bool(project_id) and project_id == self.cfg.get("manager_project")
+
     def ensure_project_rules(self, project_id):
-        """프로젝트 설정의 orchestratorRules 에 연동 규칙을 넣는다. 다른 설정은 그대로 둔다(set-config 는 통째 교체)."""
+        """프로젝트 설정의 orchestratorRules 에 연동 규칙을 넣는다. 다른 설정은 그대로 둔다(set-config 는 통째 교체).
+        Manager 프로젝트에는 Supervisor 규칙 대신 Manager 규칙을 넣는다."""
         proj = self.ao.project(project_id)
         cfg_obj = dict(proj.get("config") or {})
         rules = cfg_obj.get("orchestratorRules") or ""
-        block = supervisor_rules(self.cfg)
+        block = manager_rules(self.cfg) if self.is_manager_project(project_id) else supervisor_rules(self.cfg)
         start, end = "<!-- aohub:begin -->", "<!-- aohub:end -->"
         new_block = "%s\n%s\n%s" % (start, block, end)
         if start in rules and end in rules:
@@ -251,6 +280,8 @@ class Bridge:
     def assign(self, project_id, title, request, done_criteria, verify_cmd=None, worker_agent=None, key=None):
         if not self.ao.ready():
             raise AOError("AO 데몬이 준비되지 않았습니다. 데스크톱 앱을 열거나 `ao daemon` 을 실행하세요.")
+        if self.is_manager_project(project_id):
+            raise ValueError("%s 는 Manager(Main) 프로젝트입니다. 일은 다른 AO 프로젝트에 맡기세요." % project_id)
         request_key = key or short_hash(project_id, title, request, done_criteria, verify_cmd or "")
         t, created = self.store.create_task(request_key, project_id=project_id, title=title, request=request,
                                             done_criteria=done_criteria, verify_cmd=verify_cmd,
@@ -716,6 +747,76 @@ class Bridge:
                     db.execute("UPDATE meta SET value=? WHERE key=?", (json.dumps(info, ensure_ascii=False), row["key"]))
                 self.store.record_event("esc-closed:%s" % row["key"], "main:watch", "escalation_" + closed,
                                         t["task_id"], t["project_id"], "%s → %s" % (info["what"], closed))
+
+    # ------------------------------------------------------------ Manager Agent(Main 을 AO 세션으로)
+    def setup_manager(self, path, name=None, project_id=None, agent="claude-code"):
+        """허브 폴더를 AO 프로젝트로 등록하고 Manager 규칙을 넣고, 살아 있는 Manager 세션이 없으면 띄운다. 다시 불러도 결과가 같다."""
+        pid = project_id or self.cfg.get("manager_project") or "hub"
+        name = name or self.cfg.get("manager_name") or "Manager Agent"
+        path = os.path.abspath(os.path.expanduser(path))
+        if subprocess.run(["git", "-C", path, "rev-parse", "--git-dir"], capture_output=True).returncode != 0:
+            subprocess.run(["git", "-C", path, "init", "-q", "-b", "main"], check=True)
+        if subprocess.run(["git", "-C", path, "rev-parse", "--verify", "-q", "HEAD"], capture_output=True).returncode != 0:
+            subprocess.run(["git", "-C", path, "add", "-A"], check=True)
+            subprocess.run(["git", "-C", path, "-c", "user.name=aohub", "-c", "user.email=aohub@localhost",
+                            "commit", "-q", "--allow-empty", "-m", "허브 폴더 시작"], check=True)
+        steps = []
+        if not any(p.get("id") == pid for p in self.ao.projects()):
+            self.ao.run(["project", "add", "--path", path, "--id", pid, "--name", name,
+                         "--orchestrator-agent", agent, "--worker-agent", agent])
+            steps.append("AO 프로젝트 %s(%s) 등록" % (pid, name))
+        proj = self.ao.project(pid)
+        cfg_obj = dict(proj.get("config") or {})
+        want = {"defaultBranch": "main"}
+        changed = False
+        for k, v in want.items():
+            if cfg_obj.get(k) != v:
+                cfg_obj[k] = v
+                changed = True
+        ac = dict(cfg_obj.get("agentConfig") or {})
+        if not ac.get("permissions"):
+            ac["permissions"] = "auto"
+            cfg_obj["agentConfig"] = ac
+            changed = True
+        orch = dict(cfg_obj.get("orchestrator") or {})
+        if orch.get("agent") != agent:
+            orch["agent"] = agent
+            cfg_obj["orchestrator"] = orch
+            changed = True
+        if changed:
+            self.ao.set_config(pid, cfg_obj)
+            steps.append("프로젝트 설정(기본 브랜치 main, 권한 auto, orchestrator %s)" % agent)
+        if self.ensure_project_rules(pid):
+            steps.append("Manager 규칙(orchestratorRules) 갱신")
+        live = self._live_orchestrator(pid)
+        if live:
+            sid = live["id"]
+            steps.append("살아 있는 Manager 세션 %s 사용" % sid)
+        else:
+            sid = self.ao.spawn(pid, name, kind="orchestrator",
+                                prompt="%s resume 을 실행해 지금 상태를 확인하고, 사용자에게 Manager Agent 로 준비됐다고 짧게 알려 주세요." % aohub_cmd(self.cfg))
+            self._wait_controller(sid)
+            steps.append("Manager 세션 %s 생성" % sid)
+        self.store.attach_main("ao:" + sid)
+        return {"project": pid, "name": name, "session": sid, "steps": steps}
+
+    def deliver_notices_ao(self, ao_session):
+        """Main 이 AO 세션일 때: 알림을 ao send(고정 핸들)로 보내고 transcript 도착을 확인한다."""
+        main_id = "ao:" + ao_session
+        sent = []
+        for n in self.store.notices():
+            if not self.store.claim_notice_send(n["notice_id"], main_id, self.cfg.get("renotify_seconds") or 0):
+                continue
+            try:
+                res = self.deliver("notice:%s:%s" % (n["notice_id"], ao_session), ao_session, "%s ·" % n["notice_id"],
+                                   self.render_notice(n), task_id=n.get("task_id"), kind="notice", confirm_seconds=20)
+            except AOError as e:
+                self.store.notice_send_failed(n["notice_id"], e)
+                continue
+            sent.append(n["notice_id"])
+            self.store.record_event("notice-sent:%s:%s" % (n["notice_id"], main_id), "main:watch", "notice_sent",
+                                    n.get("task_id"), None, "Manager %s 에 ao send 로 %s 전달(%s)" % (ao_session, n["notice_id"], res))
+        return sent
 
     def deliver_notices(self, session_id):
         sent = []

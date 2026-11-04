@@ -30,6 +30,9 @@ DEFAULTS = {
     "renotify_seconds": 0,
     # Worker 수준 오류를 Supervisor 에 넘긴 뒤 Main 에 올리기까지 기다리는 시간(초).
     "escalate_seconds": 600,
+    # Main 을 AO 프로젝트의 orchestrator 로 쓸 때(Manager Agent): 그 프로젝트 id 와 화면 이름.
+    "manager_project": "hub",
+    "manager_name": "Manager Agent",
     # Supervisor 가 스스로 처리하는 오류 기준. Supervisor 규칙(orchestratorRules)과 배정 메시지에 들어간다.
     # 기준에 없는 오류, 재시도를 다 쓴 오류, 권한·설정·범위 변경은 Supervisor 가 blocked/question 으로 Main 에 올린다.
     "error_policy": {

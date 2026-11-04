@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "agent-hub-ao",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Main Claude Code 가 Agent Orchestrator 프로젝트 Supervisor 에 일을 맡기고 결과·질문을 받아 Obsidian 에 기록하는 허브 플러그인(holiday0726/claude-hub-plugin 확장): aohub 연동, 감시 훅, 대시보드, 허브 폴더 보호와 git 문구 검사 훅, setup·ao·humanizer·git-message 스킬",
   "author": {
     "name": "smdeveloper7"
