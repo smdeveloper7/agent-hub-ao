@@ -7,9 +7,20 @@
           {
             "type": "command",
             "command": "${user_config.python}",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/open_dashboard.py"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/open_dashboard.py"
+            ],
             "timeout": 40,
             "statusMessage": "에이전트 대시보드 확인 중"
+          },
+          {
+            "type": "command",
+            "command": "${user_config.python}",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/ao_watch_start.py"
+            ],
+            "timeout": 20,
+            "statusMessage": "AO 감시 연결 중"
           }
         ]
       }
@@ -21,7 +32,9 @@
           {
             "type": "command",
             "command": "${user_config.python}",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hub_only_write.py"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/hub_only_write.py"
+            ],
             "timeout": 10
           }
         ]
@@ -32,7 +45,9 @@
           {
             "type": "command",
             "command": "${user_config.python}",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/git-message-style.py"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/git-message-style.py"
+            ],
             "timeout": 10,
             "statusMessage": "커밋 문구 규칙 검사"
           }

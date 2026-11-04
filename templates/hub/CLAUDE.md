@@ -15,7 +15,7 @@
 | `decisions.json` | 사용자 결정 목록 | 허브만 |
 | `dev-occupancy.json` | 공유 dev 환경을 지금 누가 쓰는지와 예정된 재기동 | 허브만 |
 
-- 이 폴더에서 세션을 열거나 이어 열면 agent-hub 플러그인의 SessionStart 훅이 대시보드(기본 http://127.0.0.1:4990)를 확인해 꺼져 있으면 띄운다. 플러그인 설정 `orca` 가 켜져 있고 `orca` 명령이 있으면 Orca 브라우저 탭으로도 연다.
+- 이 폴더에서 세션을 열거나 이어 열면 agent-hub-ao 플러그인의 SessionStart 훅이 대시보드(기본 http://127.0.0.1:4990)를 확인해 꺼져 있으면 띄운다. 플러그인 설정 `orca` 가 켜져 있고 `orca` 명령이 있으면 Orca 브라우저 탭으로도 연다.
 - 대시보드는 위 표의 `agents.json`, `decisions.json`, `STATUS.md`, `dev-occupancy.json` 을 읽기만 한다.
 - 이 폴더의 파일은 허브만 쓴다. 작업 위치가 이 폴더 밖인 세션의 Edit/Write 는 플러그인 훅이 막는다. Bash 로 쓰는 것(`sed -i`, `>`)은 막지 못하니 워커는 바꿀 내용을 허브에 보고한다.
 - 이력을 git 으로 남기지 않는다면 COORDINATION.md 변경 로그와 STATUS.md 측정 시각이 이력이다.
@@ -43,6 +43,11 @@
 | 사용자가 이해하려고 물을 때 | `addy-skills:rebuild-understanding` |
 | 사용자가 요청한 일을 판단하거나 고민을 정리할 때 | `addy-skills:decision-support` |
 | 같은 지적이나 같은 실수가 반복될 때(허브가 스스로 판단) | `addy-skills:capture-misses` |
+
+## AO 프로젝트
+
+- Agent Orchestrator 에 등록된 프로젝트의 일은 `agent-hub-ao:ao` 스킬대로 `aohub assign` 으로 그 프로젝트 Supervisor 에 맡긴다. 아래 `claude --bg` 절차로 같은 일을 겹쳐 맡기지 않는다.
+- 세션을 열면 `aohub resume` 으로 진행 중 작업과 미처리 질문을 확인하고, `[AO 알림]`·`[AO 질문]` 은 스킬의 처리 순서를 따른다.
 
 ## 세션 다루기
 
