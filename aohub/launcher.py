@@ -61,8 +61,15 @@ def newest_root():
     return best
 
 
+def installed(root):
+    """Claude Code 가 깐 플러그인 판(…/plugins/cache/…)인지. 개발 폴더 같은 복사본은 False."""
+    parts = [p.lower() for p in os.path.normpath(root).split(os.sep)]
+    return any(parts[i] == "plugins" and parts[i + 1] == "cache" for i in range(len(parts) - 1))
+
+
 def ensure():
-    """고정 실행 파일이 없거나, 가리키는 판보다 깔린 최신 판이 같거나 새로우면 최신 판을 가리키게 한다."""
+    """고정 실행 파일이 없거나, 가리키는 판보다 깔린 최신 판이 같거나 새로우면 최신 판을 가리키게 한다.
+    설치본을 가리키고 있으면 개발 폴더 같은 복사본은 판이 같거나 높아도 덮지 않는다(시험 실행이 운영을 바꾸지 않게)."""
     path = shim_path()
     root = newest_root()
     me = os.path.join(root, "scripts", "aohub.py").replace("\\", "/")
@@ -71,6 +78,8 @@ def ensure():
         return path
     if cur and os.path.exists(cur):
         their_root = os.path.dirname(os.path.dirname(cur))
+        if installed(their_root) and not installed(root):
+            return path
         if version_of(their_root) > version_of(root):
             return path
     os.makedirs(os.path.dirname(path), exist_ok=True)
