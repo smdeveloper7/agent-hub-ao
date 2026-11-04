@@ -112,8 +112,22 @@ def cmd_projects(a):
 
 def cmd_setup_project(a):
     b = Bridge()
-    changed = b.ensure_project_rules(a.project)
-    print("%s orchestratorRules %s" % (a.project, "갱신" if changed else "이미 최신"))
+    try:
+        res = b.setup_project(a.project, path=a.path, name=a.name, worker_agent=a.worker_agent,
+                              worker_model=a.worker_model, default_branch=a.default_branch,
+                              permission=a.permission, check_only=a.check)
+    except AOError as e:
+        print("오류: %s" % e, file=sys.stderr)
+        return 1
+    out(res, True)
+    pre = res["preflight"]
+    if not pre["ok"]:
+        print("등록하지 않았습니다: " + " / ".join(pre["errors"]), file=sys.stderr)
+        return 2
+    if res.get("missing"):
+        print("설정이 다 들어가지 않았습니다: " + ", ".join(res["missing"]), file=sys.stderr)
+        return 1
+    return 0
 
 
 def cmd_assign(a):
@@ -461,8 +475,15 @@ def build():
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_projects)
 
-    s = sub.add_parser("setup-project", help="프로젝트 orchestratorRules 에 연동 규칙 넣기")
-    s.add_argument("project")
+    s = sub.add_parser("setup-project", help="AO 프로젝트 등록·설정 한 번에(점검 → 등록 → 설정 합치기 → 확인)")
+    s.add_argument("project", help="프로젝트 id")
+    s.add_argument("--path", help="등록할 git 저장소(최상위). 이미 등록된 프로젝트면 생략")
+    s.add_argument("--name", help="AO 에 보일 이름(기본: id)")
+    s.add_argument("--worker-agent", dest="worker_agent", choices=["claude-code", "codex"])
+    s.add_argument("--worker-model", dest="worker_model")
+    s.add_argument("--default-branch", dest="default_branch")
+    s.add_argument("--permission", help="AO agent 권한 모드(기본: 기존 값, 없으면 auto)")
+    s.add_argument("--check", action="store_true", help="점검만 하고 등록·설정은 하지 않음")
     s.set_defaults(fn=cmd_setup_project)
 
     s = sub.add_parser("assign", help="작업 배정")

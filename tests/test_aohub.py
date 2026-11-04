@@ -33,14 +33,30 @@ class FakeAO:
         self.fail_next_send = None  # None | "uncertain" | "failed"
         self.deliver_on_uncertain = True
         self.transcripts = {}
-        self.cfg_obj = {"worker": {"agent": "claude-code"}}
+        self.cfg_obj = {"worker": {"agent": "claude-code"}, "orchestrator": {"agent": "claude-code"},
+                        "defaultBranch": "main"}
         self.turns = {}
+        self.missing = set()  # 등록되지 않은 프로젝트 id
+        self.kind = "single_repo"
+        self.added = []
+        self.daemon_errors = {}
 
     def ready(self):
         return True
 
     def project(self, pid):
-        return {"id": pid, "path": self.project_path, "config": self.cfg_obj}
+        if pid in self.missing:
+            raise AOError("project %s not found" % pid, rc=1)
+        return {"id": pid, "path": self.project_path, "kind": self.kind, "config": self.cfg_obj}
+
+    def add_project(self, path, pid, name):
+        self.added.append((path, pid, name))
+        self.project_path = path
+        self.missing.discard(pid)
+        self.cfg_obj = {}
+
+    def daemon_error(self, sid):
+        return self.daemon_errors.get(sid)
 
     def set_config(self, pid, obj):
         self.cfg_obj = obj
@@ -476,6 +492,91 @@ class EscalationTest(Base):
         self.cfg["error_policy"] = {"supervisor_grace_seconds": 0}
         self.b.poll_once(auto_verify=False)
         self.assertEqual([n["kind"] for n in self.store.notices()], ["blocked"])
+
+
+class SetupProjectTest(Base):
+    def test_preflight_rejects_non_git_and_parent_folders(self):
+        from aohub import register
+        plain = os.path.join(self.tmp, "plain")
+        os.makedirs(os.path.join(plain, "child"))
+        git(os.path.join(plain, "child"), "init", "-q", "-b", "main")
+        r = register.preflight(plain)
+        self.assertFalse(r["ok"])
+        self.assertIn("child", r["errors"][0])
+        git(plain, "init", "-q", "-b", "main")  # AO workspace 처럼 상위 폴더를 git 으로 만든 경우도 막는다
+        r = register.preflight(plain)
+        self.assertFalse(r["ok"])
+        self.assertEqual(r["child_repos"], ["child"])
+
+    def test_preflight_repo_without_remote_uses_current_branch(self):
+        from aohub import register
+        r = register.preflight(self.repo)
+        self.assertTrue(r["ok"], r["errors"])
+        self.assertEqual(r["default_branch"], "main")
+        self.assertIsNone(r["remote"])
+        self.assertTrue(any("원격이 없습니다" in w for w in r["warnings"]))
+        empty = os.path.join(self.tmp, "empty")
+        os.makedirs(empty)
+        git(empty, "init", "-q", "-b", "main")
+        self.assertFalse(register.preflight(empty)["ok"])
+
+    def test_registers_and_merges_once(self):
+        self.ao.missing.add("newp")
+        r = self.b.setup_project("newp", path=self.repo, worker_agent="codex", worker_model="gpt-5.6-sol", check_only=True)
+        self.assertTrue(r["preflight"]["ok"])
+        self.assertEqual(self.ao.added, [])  # 점검만
+        r = self.b.setup_project("newp", path=self.repo, worker_agent="codex", worker_model="gpt-5.6-sol")
+        self.assertEqual(len(self.ao.added), 1)
+        self.assertEqual(r["missing"], [])
+        c = self.ao.cfg_obj
+        self.assertEqual(c["defaultBranch"], "main")
+        self.assertEqual(c["orchestrator"]["agent"], "claude-code")
+        self.assertEqual(c["worker"], {"agent": "codex", "agentConfig": {"model": "gpt-5.6-sol"}})
+        self.assertEqual(c["agentConfig"]["permissions"], "auto")
+        self.assertIn("<!-- aohub:begin -->", c["orchestratorRules"])
+        again = self.b.setup_project("newp")
+        self.assertFalse(again["changed"])
+        self.assertEqual(len(self.ao.added), 1)
+
+    def test_keeps_existing_settings_and_user_rules(self):
+        self.ao.cfg_obj = {"defaultBranch": "main", "trackerIntake": {"x": 1}, "orchestratorRules": "사용자 규칙",
+                           "worker": {"agent": "codex", "agentConfig": {"model": "m1"}},
+                           "agentConfig": {"permissions": "ask"}}
+        self.b.setup_project("demo")
+        c = self.ao.cfg_obj
+        self.assertEqual(c["trackerIntake"], {"x": 1})
+        self.assertEqual(c["worker"]["agentConfig"]["model"], "m1")
+        self.assertEqual(c["agentConfig"]["permissions"], "ask")
+        self.assertTrue(c["orchestratorRules"].startswith("사용자 규칙"))
+
+    def test_refuses_workspace_project(self):
+        self.ao.kind = "workspace"
+        with self.assertRaises(AOError):
+            self.b.setup_project("demo")
+
+    def test_supervisor_not_spawned_without_settings(self):
+        self.ao.cfg_obj = {"worker": {"agent": "claude-code"}}
+        with self.assertRaises(AOError) as cm:
+            self.b.ensure_supervisor("demo")
+        self.assertIn("setup-project", str(cm.exception))
+        self.assertEqual(self.ao.spawned, [])
+
+    def test_stopped_controller_reports_daemon_cause(self):
+        sid = self.ao.spawn("demo", "sup-demo", kind="orchestrator")
+        self.ao.daemon_errors[sid] = "copy workspace asset .agents"
+        orig = self.ao.session
+        self.ao.session = lambda s, transcript=0, cap=1000: dict(orig(s, transcript, cap),
+                                                                 transcript={"controller": "stopped"})
+        import aohub.bridge as br
+        t0 = br.time.time
+        clock = iter(range(0, 10000, 50))
+        br.time.time = lambda: next(clock)
+        try:
+            with self.assertRaises(AOError) as cm:
+                self.b._wait_controller(sid, timeout=90)
+        finally:
+            br.time.time = t0
+        self.assertIn("copy workspace asset", str(cm.exception))
 
 
 class HubHookTest(unittest.TestCase):

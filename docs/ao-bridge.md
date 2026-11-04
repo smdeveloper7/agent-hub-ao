@@ -39,22 +39,28 @@ Main Claude Code 세션(허브)이 [Agent Orchestrator](https://github.com/Orche
 
 1. AO 를 설치하고 데몬을 띄웁니다. 앱을 열거나, 앱 없이 `ao daemon` 을 실행합니다.
    Windows 설치본의 CLI 는 `%LOCALAPPDATA%\Programs\agent-orchestrator\resources\daemon\ao.exe` 입니다(PATH 에 없어도 aohub 가 찾습니다).
-2. 저장소를 AO 프로젝트로 등록합니다. 원격이 없는 저장소는 기본 브랜치를 꼭 지정합니다(안 하면 Supervisor 가 `idle` 로 보이지만 시작하지 못합니다).
-
-   ```
-   ao project add --path <저장소> --id <id> --orchestrator-agent claude-code --worker-agent codex
-   ao project set-config <id> --permission auto --worker-agent codex --orchestrator-agent claude-code --default-branch main
-   ```
-
-   `set-config` 는 설정을 통째로 바꿉니다. 플래그로 쓸 때는 필요한 값을 한 번에 다 주거나, `ao project get <id> --json` 의 config 를 고쳐 `--config-json` 으로 넣습니다.
-   ChatGPT 계정 Codex 는 AO 기본 모델(`gpt-6.1-sol`)을 거부할 수 있습니다. 그때는 worker 모델을 지정합니다(`config.worker.agentConfig.model`, 예 `gpt-5.6-sol`).
-3. aohub 설정을 만듭니다. 상태 폴더는 플러그인 폴더와 따로 `~/.claude-hub-ao` 입니다(`AOHUB_HOME` 으로 변경).
+2. aohub 설정을 만듭니다. 상태 폴더는 플러그인 폴더와 따로 `~/.claude-hub-ao` 입니다(`AOHUB_HOME` 으로 변경).
 
    ```
    python <플러그인>/scripts/aohub.py init --vault-dir <Obsidian Vault> [--raw-script <Vault>/scripts/worklog.ps1]
    python <플러그인>/scripts/aohub.py doctor
-   python <플러그인>/scripts/aohub.py setup-project <id>      # orchestratorRules 에 연동 규칙(이후 띄우는 Supervisor 부터 적용)
    ```
+
+3. 저장소를 AO 프로젝트로 등록합니다. 점검 → 등록 → 설정 합치기 → 다시 읽어 확인을 한 명령으로 합니다.
+
+   ```
+   python <플러그인>/scripts/aohub.py setup-project <id> --path <저장소> --worker-agent codex --worker-model gpt-5.6-sol --check
+   python <플러그인>/scripts/aohub.py setup-project <id> --path <저장소> --worker-agent codex --worker-model gpt-5.6-sol
+   ```
+
+   - AO 프로젝트는 git 저장소 하나입니다. Supervisor 와 Worker 는 그 저장소의 git worktree 에서 일합니다. git 이 아닌 폴더, 커밋이 없는 저장소, 하위 저장소를 담은 상위 폴더는 등록하지 않습니다(오류로 멈춤).
+     여러 저장소를 읽어야 하는 일은 대표 저장소 하나를 등록하고 나머지를 배정 요청에 절대 경로로 적습니다.
+     AO 의 `--as-workspace`(상위 폴더 묶음)는 쓰지 않습니다. 11-04 실측에서 AO 가 상위 폴더에 git 저장소를 새로 만들었고, origin/HEAD 없는 하위 저장소와 `.agents` 안 정션 때문에 Supervisor 작업 공간을 만들지 못했습니다.
+   - 기본 브랜치는 `--default-branch`, 없으면 origin/HEAD, 없으면 현재 브랜치로 정해 설정에 넣습니다. 원격이 없는 저장소에 기본 브랜치가 빠지면 Supervisor 가 `idle` 로 보여도 시작하지 못합니다.
+   - 설정은 `ao project get` 의 기존 값 위에 aohub 가 필요한 값(기본 브랜치, Supervisor·Worker agent, 권한 모드, 연동 규칙)만 덮어 `--config-json` 으로 넣습니다. `ao project set-config` 플래그는 설정을 통째로 바꾸므로 직접 쓰지 않습니다.
+   - 정션·링크는 경고로 알립니다. 실패가 확인된 것은 상위 폴더 묶음 등록뿐이라 저장소 하나 등록은 막지 않습니다.
+   - ChatGPT 계정 Codex 는 AO 기본 모델(`gpt-6.1-sol`)을 거부할 수 있습니다. 그때는 `--worker-model gpt-5.6-sol` 처럼 Worker 모델을 지정합니다.
+   - Supervisor 가 설정이 빠진 채 띄워지지 않게 `assign` 이 먼저 확인하고, 시작이 멈추면 AO 데몬 로그(`~/.ao/daemon.log`)의 원인을 오류에 붙입니다.
 
 4. 허브 폴더에서 Main 세션을 엽니다. 플러그인의 SessionStart 훅(`hooks/ao_watch_start.py`)이 세션 이름을 `hub`(설정 `hub_title`)로 붙이고 `aohub watch` 를 이 세션에 붙여 띄웁니다.
    훅을 쓰지 않으면 Main 안에서 Bash 백그라운드로 `aohub watch` 를 실행합니다. 감시 프로세스는 Main 세션의 inbox 주소와 토큰을 물려받아야 하므로 다른 터미널에서 띄우면 안 됩니다.
@@ -113,7 +119,7 @@ Manager 프로젝트에는 `aohub assign` 으로 일을 맡기지 않습니다. 
 |---|---|---|
 | `init`, `doctor` | Main | 설정, 연결 점검(ao, 데몬, Vault, inbox, 감시 프로세스) |
 | `projects` | Main | AO 프로젝트, 살아 있는 Supervisor, 연동 규칙 여부, 진행 중 작업 수 |
-| `setup-project <id>` | Main | 프로젝트 `orchestratorRules` 에 연동 규칙 블록을 넣음(다른 설정 보존) |
+| `setup-project <id> [--path] [--worker-agent] [--worker-model] [--default-branch] [--check]` | Main | 저장소 점검, 없으면 AO 등록, 기본 브랜치·agent·권한·연동 규칙을 기존 설정에 합쳐 넣고 다시 읽어 확인 |
 | `assign` | Main | 작업 ID 발급, Supervisor 확보(프로젝트당 하나), `[배정]` 전달과 도착 확인 |
 | `status [작업]` | Main | 기록 + AO 에 방금 다시 물은 세션 상태(`ao_live`) |
 | `questions`, `answer <Q> --text --reason` | Main | 판단 대기 목록, 사용자 답을 해당 Supervisor 에 `[답변]` 으로 전달 |

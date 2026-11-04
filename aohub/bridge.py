@@ -16,7 +16,7 @@ import os
 import subprocess
 import time
 
-from . import config, inbox, launcher
+from . import config, inbox, launcher, register
 from .ao import AO, AOError
 from .store import Store, now
 from .vault import Vault
@@ -102,9 +102,13 @@ def manager_rules(cfg):
         "",
         "- 세션을 열거나 이어서 시작하면 먼저 `%s resume` 을 실행합니다. 진행 중 작업(AO 재확인), 미처리 질문·알림, 읽을 노트가 나옵니다." % cmd,
         "  notes_to_read 의 프로젝트·결정 노트를 읽고 이전 결정과 이유를 이어 갑니다.",
-        "- 새 저장소 등록: 사용자 확인 뒤 `ao project add --path <저장소> --id <id> --orchestrator-agent claude-code --worker-agent <agent>`,",
-        "  `ao project set-config <id> --permission auto --orchestrator-agent claude-code --worker-agent <agent> --default-branch <브랜치>`(설정 통째 교체 주의),",
-        "  `%s setup-project <id>` 순서로 등록합니다." % cmd,
+        "- 새 저장소 등록: AO 프로젝트는 git 저장소 하나입니다. 여러 저장소를 담은 상위 폴더는 등록하지 않고(`--as-workspace` 금지),",
+        "  일할 대표 저장소 하나를 등록합니다. 읽기만 할 다른 저장소·문서는 배정 요청에 절대 경로로 적습니다.",
+        "  `%s setup-project <id> --path <저장소> [--worker-agent <agent>] --check` 로 점검하고, errors 가 없으면 사용자 확인 뒤 `--check` 없이" % cmd,
+        "  다시 실행합니다(등록·기본 브랜치·agent·권한·규칙을 합쳐 한 번에). `ao project set-config` 는 직접 쓰지 않습니다(설정 통째 교체).",
+        "  점검 오류를 저장소를 고쳐 풀지 않습니다. 원인과 선택지를 사용자에게 묻습니다.",
+        "- 사용자에게 보이는 글을 줄입니다. 도구를 쓰기 전마다 '확인하겠습니다' 같은 설명을 쓰지 않습니다.",
+        "  사용자에게는 결정이 필요한 질문, 막힌 원인과 선택지, 결과만 짧게 씁니다. 조사 과정은 결과에 한두 줄로만 남깁니다.",
         "- 배정: `%s projects` 로 프로젝트를 보고, 완료 조건을 정해 `%s assign --project <id> --title \"…\" --request \"…\" --done \"…\" [--verify \"…\"] [--worker-agent codex]`." % (cmd, cmd),
         "  실행해 확인할 명령이 없는 일은 --verify 를 빼고 완료 조건에 볼 결과물을 적습니다.",
         "- 감시 프로세스가 `[AO 알림] N-…`, `[AO 질문] N-…` 을 이 세션에 보냅니다. 사용자에게 알기 쉽게 보고하고 `%s ack <N-ID>` 를 실행합니다." % cmd,
@@ -160,25 +164,70 @@ class Bridge:
     def is_manager_project(self, project_id):
         return bool(project_id) and project_id == self.cfg.get("manager_project")
 
+    def _rules_merger(self, project_id):
+        block = manager_rules(self.cfg) if self.is_manager_project(project_id) else supervisor_rules(self.cfg)
+        start, end = "<!-- aohub:begin -->", "<!-- aohub:end -->"
+        new_block = "%s\n%s\n%s" % (start, block, end)
+
+        def merge(rules):
+            if start in rules and end in rules:
+                i, j = rules.index(start), rules.index(end) + len(end)
+                return rules[:i] + new_block + rules[j:]
+            return (rules.rstrip() + "\n\n" if rules.strip() else "") + new_block
+        return merge
+
     def ensure_project_rules(self, project_id):
         """프로젝트 설정의 orchestratorRules 에 연동 규칙을 넣는다. 다른 설정은 그대로 둔다(set-config 는 통째 교체).
         Manager 프로젝트에는 Supervisor 규칙 대신 Manager 규칙을 넣는다."""
         proj = self.ao.project(project_id)
         cfg_obj = dict(proj.get("config") or {})
         rules = cfg_obj.get("orchestratorRules") or ""
-        block = manager_rules(self.cfg) if self.is_manager_project(project_id) else supervisor_rules(self.cfg)
-        start, end = "<!-- aohub:begin -->", "<!-- aohub:end -->"
-        new_block = "%s\n%s\n%s" % (start, block, end)
-        if start in rules and end in rules:
-            i, j = rules.index(start), rules.index(end) + len(end)
-            new_rules = rules[:i] + new_block + rules[j:]
-        else:
-            new_rules = (rules.rstrip() + "\n\n" if rules.strip() else "") + new_block
+        new_rules = self._rules_merger(project_id)(rules)
         if new_rules == rules:
             return False
         cfg_obj["orchestratorRules"] = new_rules
         self.ao.set_config(project_id, cfg_obj)
         return True
+
+    def setup_project(self, project_id, path=None, name=None, worker_agent=None, worker_model=None,
+                      default_branch=None, permission=None, check_only=False):
+        """AO 프로젝트 등록을 한 번에 한다: 점검 → (없으면) ao project add → 설정 합쳐 넣기 → 다시 읽어 확인.
+        기존 설정은 지우지 않고 aohub 가 필요한 값만 덮는다."""
+        existing = None
+        try:
+            existing = self.ao.project(project_id)
+        except AOError:
+            existing = None
+        if existing and path and not register._same(existing.get("path") or "", path):
+            raise AOError("프로젝트 %s 는 이미 다른 경로(%s)로 등록돼 있습니다." % (project_id, existing.get("path")))
+        repo = (existing or {}).get("path") or path
+        if not repo:
+            raise AOError("등록되지 않은 프로젝트입니다. --path <저장소> 를 주세요.")
+        if existing and existing.get("kind") == "workspace":
+            raise AOError("프로젝트 %s 는 상위 폴더 묶음(workspace)으로 등록돼 있습니다. aohub 는 저장소 하나 단위만 씁니다. "
+                          "AO 앱에서 이 프로젝트를 지우고 대표 저장소를 다시 등록하세요." % project_id)
+        pre = register.preflight(repo, default_branch or ((existing or {}).get("config") or {}).get("defaultBranch"))
+        result = {"project": project_id, "path": repo, "registered": bool(existing), "preflight": pre, "changed": False}
+        if not pre["ok"] or check_only:
+            return result
+        if not existing:
+            self.ao.add_project(repo, project_id, name or project_id)
+            existing = self.ao.project(project_id)
+            result["added"] = True
+        cur = dict(existing.get("config") or {})
+        new = register.merged_config(cur, self._rules_merger(project_id), pre["default_branch"], worker_agent,
+                                     worker_model, permission)
+        if new != cur:
+            self.ao.set_config(project_id, new)
+            result["changed"] = True
+        after = (self.ao.project(project_id) or {}).get("config") or {}
+        result["missing"] = register.missing_settings(after)
+        result["config"] = {"defaultBranch": after.get("defaultBranch"),
+                            "orchestrator": (after.get("orchestrator") or {}).get("agent"),
+                            "worker": (after.get("worker") or {}).get("agent"),
+                            "worker_model": ((after.get("worker") or {}).get("agentConfig") or {}).get("model"),
+                            "permissions": (after.get("agentConfig") or {}).get("permissions")}
+        return result
 
     def _live_orchestrator(self, project_id):
         alive = [o for o in self.ao.orchestrators(project_id) if not o.get("isTerminated")]
@@ -202,6 +251,11 @@ class Bridge:
                     return live["id"], False
             raise AOError("다른 프로세스가 %s Supervisor 를 띄우는 중인데 끝나지 않았습니다." % project_id, uncertain=True)
         self.ensure_project_rules(project_id)
+        miss = register.missing_settings((self.ao.project(project_id) or {}).get("config"))
+        if miss:
+            self.store.set_supervisor(project_id, None, "failed")
+            raise AOError("프로젝트 %s 설정에 %s 가 없어 Supervisor 를 띄우지 않았습니다. `aohub setup-project %s` 를 먼저 실행하세요."
+                          % (project_id, ", ".join(miss), project_id))
         name = (self.cfg.get("supervisor_prefix") or "sup-") + project_id
         try:
             sid = self.ao.spawn(project_id, name, kind="orchestrator")
@@ -231,8 +285,9 @@ class Bridge:
             if last == "ready":
                 return True
             time.sleep(3)
-        raise AOError("Supervisor %s 컨트롤러가 준비되지 않았습니다(마지막 상태 %s). ao 데몬 로그를 확인하세요." % (sid, last),
-                      uncertain=True)
+        why = self.ao.daemon_error(sid) if hasattr(self.ao, "daemon_error") else None
+        raise AOError("Supervisor %s 컨트롤러가 준비되지 않았습니다(마지막 상태 %s). %s" % (
+            sid, last, ("AO 데몬 오류: " + why) if why else "ao 데몬 로그(~/.ao/daemon.log)를 확인하세요."), uncertain=True)
 
     def transcript_has(self, sid, marker, entries=60):
         s = self.ao.session(sid, transcript=entries, cap=300)

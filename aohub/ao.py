@@ -147,6 +147,30 @@ class AO:
                               "--client-message-id", client_message_id], timeout=timeout)
         return out.strip()
 
+    def add_project(self, path, project_id, name):
+        """저장소 하나를 프로젝트로 등록한다. 상위 폴더 묶음(--as-workspace)은 쓰지 않는다."""
+        return self.run(["project", "add", "--path", path, "--id", project_id, "--name", name])[1]
+
+    def daemon_error(self, session_id, tail_bytes=4 * 1024 * 1024):
+        """데몬 로그에서 이 세션의 마지막 ERROR 줄의 msg·error 를 찾는다. 세션이 'stopped' 로 멈춘 이유를 알려 준다."""
+        path = os.path.join(os.path.expanduser("~"), ".ao", "daemon.log")
+        try:
+            with open(path, "rb") as f:
+                f.seek(0, 2)
+                f.seek(max(0, f.tell() - tail_bytes))
+                text = f.read().decode("utf-8", "replace")
+        except OSError:
+            return None
+        key = "sessionID=%s " % session_id
+        for line in reversed(text.splitlines()):
+            if "level=ERROR" in line and (key in line or line.endswith("sessionID=" + session_id)):
+                m = re.search(r'msg="([^"]*)"', line)
+                e = re.search(r'error="((?:[^"\\]|\\.)*)"', line)
+                msg = (m.group(1) if m else "") + (": " + e.group(1) if e else "")
+                msg = msg.replace('\\"', '"').replace("\\\\\\\\", "\\").replace("\\\\", "\\")
+                return msg[:600] or line[:600]
+        return None
+
     def set_config(self, project_id, cfg_obj):
         return self.run_json(["project", "set-config", project_id, "--config-json",
                               json.dumps(cfg_obj, ensure_ascii=False), "--json"])

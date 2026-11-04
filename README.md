@@ -68,17 +68,6 @@ claude plugin install agent-hub-ao@agent-hub-ao `
 
 AO 앱을 열거나 앱 없이 `ao daemon` 을 띄웁니다. Windows 설치본의 CLI 는 `%LOCALAPPDATA%\Programs\agent-orchestrator\resources\daemon\ao.exe` 이고, PATH 에 없어도 aohub 가 찾습니다.
 
-맡길 저장소를 AO 프로젝트로 등록합니다.
-
-```sh
-ao project add --path <저장소> --id <프로젝트 id> --orchestrator-agent claude-code --worker-agent codex
-ao project set-config <프로젝트 id> --permission auto --orchestrator-agent claude-code --worker-agent codex --default-branch main
-```
-
-- `set-config` 는 설정을 통째로 바꿉니다. 플래그로 쓸 때는 필요한 값을 한 번에 다 줍니다.
-- 원격이 없는 저장소는 `--default-branch` 를 꼭 줍니다. 없으면 Supervisor 가 `idle` 로 보여도 시작하지 못합니다.
-- ChatGPT 계정 Codex 가 AO 기본 모델을 거부하면 Worker 모델을 지정합니다(`config.worker.agentConfig.model`). [docs/ao-bridge.md](docs/ao-bridge.md) 참고.
-
 ### 3. aohub 설정
 
 ```sh
@@ -87,6 +76,17 @@ python <플러그인 폴더>/scripts/aohub.py doctor
 ```
 
 상태와 설정은 플러그인 폴더와 따로 `~/.claude-hub-ao` 에 둡니다(`AOHUB_HOME` 으로 변경). 일일 로그를 기존 기록 스크립트로 남기려면 `--raw-script <스크립트>` 를 줍니다.
+
+맡길 저장소를 AO 프로젝트로 등록합니다. 점검부터 등록, 설정, 확인까지 한 명령으로 합니다. Manager Agent 에게 "이 저장소 등록해줘" 라고 해도 같은 명령을 씁니다.
+
+```sh
+python ~/.claude-hub-ao/bin/aohub.py setup-project <프로젝트 id> --path <저장소> --worker-agent codex --check   # 점검만
+python ~/.claude-hub-ao/bin/aohub.py setup-project <프로젝트 id> --path <저장소> --worker-agent codex           # 등록
+```
+
+- AO 프로젝트는 git 저장소 하나입니다. Supervisor 와 Worker 가 그 저장소의 git worktree 에서 일하기 때문입니다. git 이 아닌 폴더나 여러 저장소를 담은 상위 폴더는 등록하지 않습니다. 여러 저장소를 읽어야 하면 대표 저장소 하나를 등록하고 나머지는 요청에 경로로 적습니다.
+- 기본 브랜치, Supervisor·Worker agent, 권한 모드, 연동 규칙을 기존 설정에 합쳐 넣습니다. `ao project set-config` 는 설정을 통째로 바꾸므로 직접 쓰지 않습니다.
+- ChatGPT 계정 Codex 가 AO 기본 모델을 거부하면 `--worker-model gpt-5.6-sol` 처럼 Worker 모델을 지정합니다.
 
 ### 4. Manager Agent 띄우기
 

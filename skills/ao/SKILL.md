@@ -32,16 +32,21 @@ AO 로 맡긴 작업은 AO 로만 띄우고, 보고, 멈춘다.
 
 ## 새 프로젝트 등록
 
-사용자가 새 저장소를 쓰자고 하면, 저장소 경로·프로젝트 id·worker agent 를 확인하고 사용자 확인 뒤 등록한다.
+AO 프로젝트는 git 저장소 하나다. Supervisor 와 Worker 는 그 저장소의 git worktree 에서 일한다.
 
-```
-ao project add --path <저장소> --id <id> --name <id> --orchestrator-agent claude-code --worker-agent <claude-code|codex>
-ao project set-config <id> --permission auto --orchestrator-agent claude-code --worker-agent <agent> --default-branch <기본 브랜치>
-aohub setup-project <id>
-```
+1. 일할 대표 저장소 하나를 고른다. 여러 저장소를 담은 상위 폴더는 등록하지 않는다(`ao project add --as-workspace` 쓰지 않음).
+   읽기만 할 다른 저장소·문서는 배정 요청에 절대 경로로 적어 Worker 가 읽게 한다.
+2. 점검만 먼저 한다. `errors` 가 있으면 등록하지 말고 그 내용과 대안을 사용자에게 보여 준다. `warnings` 는 함께 알린다.
 
-- `set-config` 는 설정을 통째로 바꾼다. 이미 있는 프로젝트는 `ao project get <id> --json` 의 config 를 고쳐 `--config-json` 으로 넣는다.
-- 원격이 없는 저장소는 기본 브랜치를 꼭 준다. 등록 뒤 `aohub projects` 로 확인한다.
+   ```
+   aohub setup-project <id> --path <저장소> [--worker-agent claude-code|codex] [--worker-model <모델>] --check
+   ```
+
+3. 사용자 확인 뒤 `--check` 를 빼고 같은 명령을 실행한다. 등록, 기본 브랜치, Supervisor·Worker agent, 권한 모드, 연동 규칙을
+   기존 설정에 합쳐 한 번에 넣고 다시 읽어 확인한다. 이미 등록된 프로젝트는 `--path` 없이 다시 실행해도 된다.
+- `ao project set-config` 를 직접 쓰지 않는다. 설정을 통째로 바꿔 aohub 규칙이나 agent 설정이 지워진다.
+- 등록 문제를 Main 이 저장소를 고쳐 풀지 않는다(`.gitignore`, `remote set-head`, 링크 정리 등). 원인과 선택지를 사용자에게 묻는다.
+- Supervisor 가 멈추면 `assign` 오류에 AO 데몬이 남긴 원인이 함께 나온다. 같은 배정을 원인 확인 없이 되풀이하지 않는다.
 
 ## 배정
 
@@ -124,6 +129,8 @@ aohub setup-project <id>
 ## 문장
 
 - 사용자 보고, 결정 노트의 답과 이유, 인계 노트 요약은 `agent-hub-ao:humanizer` 기준으로 쓴다(과장, 상투어, 군더더기 없이).
+- 도구를 쓰기 전마다 "확인하겠습니다" 같은 설명을 쓰지 않는다. AO 앱은 그 줄을 모두 대화로 보여 준다.
+  사용자에게는 결정이 필요한 질문, 막힌 원인과 선택지, 결과만 짧게 쓴다. 조사 과정은 결과에 한두 줄로만 남긴다.
 - 배정 메시지와 Supervisor 규칙에는 커밋 문구 규칙(`agent-hub-ao:git-message`)이 들어간다. Codex worker 에게도 전달된다.
 
 ## 하지 않는 것
