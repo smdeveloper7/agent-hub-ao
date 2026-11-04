@@ -95,7 +95,8 @@ Main Claude Code 세션(허브)이 [Agent Orchestrator](https://github.com/Orche
 | `status [작업]` | Main | 기록 + AO 에 방금 다시 물은 세션 상태(`ao_live`) |
 | `questions`, `answer <Q> --text --reason` | Main | 판단 대기 목록, 사용자 답을 해당 Supervisor 에 `[답변]` 으로 전달 |
 | `tell <작업> --text` | Main | 같은 작업의 Supervisor 에 후속 지시 |
-| `verify <작업>` | Main/감시 | Worker 작업 공간에서 검증 명령 실행, 커밋·변경 확인 |
+| `verify <작업>` | Main/감시 | Worker 작업 공간에서 검증 명령 실행, 커밋·변경 확인. 검증 명령이 없으면 `확인 필요` 로 둠 |
+| `accept <작업> --note` | Main | 검증 명령 없는 작업을 사용자 확인으로 완료 |
 | `notices`, `ack <N>` | Main | Main 에 보낸 알림, 처리 기록 |
 | `watch` | Main 세션 안 | 주기적으로 AO 를 읽고 알림을 Main inbox 로 보냄 |
 | `resume` | Main | 재시작 뒤 Main 등록, 진행 중 작업·질문·알림, 읽을 노트 |
@@ -117,6 +118,8 @@ Main Claude Code 세션(허브)이 [Agent Orchestrator](https://github.com/Orche
 전송 성공, 세션 idle, 프로세스 종료, Worker `done` 보고, Supervisor `done` 보고는 완료가 아닙니다.
 Supervisor 가 `done` 을 올리면 감시 프로세스가 Worker 브랜치의 작업 트리를 `git worktree list` 로 찾아 검증 명령을 직접 돌리고,
 exit 0 이고 기준 브랜치 뒤 커밋이 있을 때만 `verified_done` 으로 둡니다. 보고 원문은 노트의 "보고만 받은 것" 에 따로 둡니다.
+
+검증 명령이 없는 작업(문서, 조사)은 `needs_review`(확인 필요)로 두고 Main 에 알립니다. Main 이 결과물을 사용자에게 보여 주고, 사용자가 확인하면 `aohub accept` 로 `verified_done` 이 됩니다. Supervisor 에 실패로 되돌리지 않습니다.
 
 AO 의 `idle` 은 turn 실패도 포함합니다. 감시 프로세스는 idle Worker 의 마지막 turn 상태를 읽어 `failed` 를 잡습니다.
 

@@ -192,6 +192,10 @@ def cmd_worker_state(a):
     out(Bridge().worker_state(a.session), True)
 
 
+def cmd_accept(a):
+    out(Bridge().accept(a.task, a.note), True)
+
+
 def cmd_verify(a):
     out(Bridge().verify(a.task), True)
 
@@ -401,6 +405,11 @@ def build():
     s = sub.add_parser("worker-state", help="(Supervisor 용) worker 의 실제 상태(idle 에 가려진 turn 실패 포함)")
     s.add_argument("session")
     s.set_defaults(fn=cmd_worker_state)
+
+    s = sub.add_parser("accept", help="검증 명령 없는 작업을 사용자 확인으로 완료")
+    s.add_argument("task")
+    s.add_argument("--note", help="사용자가 확인한 내용")
+    s.set_defaults(fn=cmd_accept)
 
     s = sub.add_parser("verify", help="worker 작업 공간에서 검증 명령 실행")
     s.add_argument("task")

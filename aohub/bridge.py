@@ -384,6 +384,9 @@ class Bridge:
         t = self.store.task(task_id)
         if not t:
             raise ValueError("모르는 작업 ID: %s" % task_id)
+        if not t.get("verify_cmd"):
+            self.needs_review(t)
+            return {"task_id": task_id, "status": "needs_review", "note": "검증 명령이 없어 사용자 확인으로 끝냅니다(accept)"}
         ppath = self.project_path(t["project_id"])
         workers = json.loads(t.get("worker_sessions") or "[]")
         if not workers:
@@ -550,7 +553,10 @@ class Bridge:
                 self.check_failures(self.store.task(tid))
                 self.check_escalations(self.store.task(tid))
                 t = self.store.task(tid)
-                if auto_verify and t["status"] == "reported_done" and t.get("verify_cmd"):
+                if auto_verify and t["status"] == "reported_done" and not t.get("verify_cmd"):
+                    self.needs_review(t)  # 실행해 확인할 명령이 없는 일(문서, 조사 등): 사용자 확인으로 끝낸다
+                    new += 1
+                elif auto_verify and t["status"] == "reported_done":
                     try:
                         self.verify(tid)
                         new += 1
@@ -559,6 +565,45 @@ class Bridge:
                                                 "verify_error", tid, pid, str(e)[:300])
         self.sync_vault(quiet=True)
         return new
+
+    # ------------------------------------------------------------ 검증 명령이 없는 일: 사용자 확인
+    def needs_review(self, t):
+        """완료 보고는 받았지만 Main 이 실행해 확인할 명령이 없다. 결과물을 사용자에게 보여 주고 accept 로 끝낸다."""
+        tid = t["task_id"]
+        self.store.update_task(tid, status="needs_review", checked_at=now())
+        last = (t.get("reported_summary") or "").splitlines()[-1:] or ["(보고 내용 없음)"]
+        ekey = "review:%s:%s" % (tid, short_hash(t.get("reported_summary") or ""))
+        self.store.record_event(ekey, "main:verify", "needs_review", tid, t["project_id"],
+                                "검증 명령이 없어 사용자 확인 필요")
+        self.store.add_notice("notice:" + ekey, "review", "\n".join([
+            self._notice_head("완료 보고, 사용자 확인 필요", t),
+            "완료 조건: %s" % t["done_criteria"],
+            "보고(검증 전 내용): %s" % last[0][:600],
+            "실행해 확인할 검증 명령이 없는 작업입니다. 결과물(문서, 파일, 링크)을 열어 사용자에게 보여 주고 확인을 받으세요.",
+            "확인되면 `%s accept %s --note \"<사용자가 확인한 내용>\"`, 고칠 점이 있으면 `%s tell %s --text \"<고칠 점>\"`." % (
+                aohub_cmd(self.cfg), tid, aohub_cmd(self.cfg), tid),
+        ]), tid)
+
+    def accept(self, task_id, note=None):
+        """사용자가 결과를 확인했다. 검증 명령 없는 작업을 완료로 닫는다."""
+        t = self.store.task(task_id)
+        if not t:
+            raise ValueError("모르는 작업 ID: %s" % task_id)
+        if t["status"] == "verified_done":
+            return {"task_id": task_id, "status": "verified_done", "note": "이미 완료"}
+        if t["status"] not in ("needs_review", "reported_done", "verify_failed"):
+            raise ValueError("%s 는 아직 완료 보고 전입니다(상태 %s)." % (task_id, t["status"]))
+        res = {"at": now(), "manual": True, "cmd": None, "passed": True,
+               "note": note or "사용자 확인", "exit_code": None}
+        self.store.update_task(task_id, status="verified_done", verified=1, checked_at=now(),
+                               verification=json.dumps(res, ensure_ascii=False))
+        self.store.record_event("accept:%s" % task_id, "main:user", "accepted", task_id, t["project_id"],
+                                "사용자 확인으로 완료: %s" % (note or "-"), {"note": note})
+        for n in self.store.notices():
+            if n.get("task_id") == task_id and n["kind"] == "review":
+                self.store.ack_notice(n["notice_id"])
+        self.sync_vault()
+        return {"task_id": task_id, "status": "verified_done"}
 
     # ------------------------------------------------------------ Worker 수준 오류: Supervisor 먼저
     def escalate_to_supervisor(self, t, ekey, what, detail):

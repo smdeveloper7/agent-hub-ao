@@ -246,6 +246,38 @@ class ReportTest(Base):
         self.assertFalse(self.store.claim_notice_send(n["notice_id"], "main-3"))
 
 
+class ReviewTest(Base):
+    """검증 명령이 없는 일(문서, 조사)은 사용자 확인으로 끝낸다."""
+
+    def test_no_verify_cmd_needs_user_review_then_accept(self):
+        t, _, _ = self.assign(verify_cmd=None, title="설계 문서", request="설계 문서 작성", done_criteria="문서 초안")
+        tid = t["task_id"]
+        self.b.sup_report(tid, "done", "docs/design.md 작성", worker="w1")
+        self.b.poll_once(auto_verify=True)
+        self.b.poll_once(auto_verify=True)
+        self.assertEqual(self.store.task(tid)["status"], "needs_review")
+        reviews = [n for n in self.store.notices() if n["kind"] == "review"]
+        self.assertEqual(len(reviews), 1)
+        self.assertIn("accept %s" % tid, reviews[0]["text"])
+        self.assertEqual([b for s, b, _ in self.ao.sent if b.startswith("[알림]")], [])  # Supervisor 에 실패로 보내지 않음
+        with self.assertRaises(ValueError):
+            self.b.accept("T-없음")
+        self.b.accept(tid, note="사용자가 문서 확인")
+        t = self.store.task(tid)
+        self.assertEqual((t["status"], t["verified"]), ("verified_done", 1))
+        self.assertEqual([n for n in self.store.notices() if n["kind"] == "review"], [])
+        note = open(os.path.join(self.vault_dir, "wiki", "tasks", tid + ".md"), encoding="utf-8").read()
+        self.assertIn("사용자 확인: 사용자가 문서 확인", note)
+        raw = "".join(open(os.path.join(self.vault_dir, "raw", f), encoding="utf-8").read()
+                      for f in os.listdir(os.path.join(self.vault_dir, "raw")) if f.endswith(".md"))
+        self.assertIn("사용자 확인으로 완료", raw)
+
+    def test_accept_before_done_is_refused(self):
+        t, _, _ = self.assign(verify_cmd=None)
+        with self.assertRaises(ValueError):
+            self.b.accept(t["task_id"])
+
+
 class EscalationTest(Base):
     """Worker 수준 오류는 Supervisor 가 먼저 잡는다. Main 감시는 안전망(2026-11-04 사용자 결정)."""
 

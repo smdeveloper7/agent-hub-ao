@@ -640,14 +640,34 @@ function agentCard(a) {
     subFold(a))
 }
 
+// 기본 화면은 허브 팀(agents.json 에 있는 세션과 허브)만 펼친다. AO 가 띄운 세션과 이 PC 의 다른 세션은 접힌 묶음으로 둔다.
+const FOLDS = { ao: ['AO 세션', 'Agent Orchestrator 가 띄운 Supervisor·Worker. 진행 화면은 AO 앱에서 봅니다'],
+  other: ['다른 세션', '허브 팀(agents.json)에 등록되지 않은 이 PC 의 세션'] }
+const foldOpen = { ao: store.get('foldAo', false), other: store.get('foldOther', false) }
+const isTeam = a => !a.origin || a.origin === 'team' || a.name === 'hub'
+
+function foldSection(key, list) {
+  const [title, hint] = FOLDS[key], open = foldOpen[key]
+  const live = list.filter(a => a.section !== 'done').length
+  return h('section', { class: 'sec', 'data-sec': 'fold-' + key },
+    h('button', {
+      class: 'sec-h', 'aria-expanded': String(open), title: hint,
+      onclick() { foldOpen[key] = !open; store.set(key === 'ao' ? 'foldAo' : 'foldOther', !open); renderList() }
+    }, h('h2', {}, title), h('span', { class: 'num' }, list.length),
+      live ? h('span', { class: 'num ok', title: '끝나지 않은 세션' }, live) : null,
+      h('span', { class: 'chev', 'aria-hidden': 'true' }, open ? '접기' : '펼치기')),
+    open ? (list.length ? list.map(agentCard) : h('div', { class: 'sec-empty' }, '없음')) : null)
+}
+
 // the server already sorts: section, then task / resident / other, then latest activity
 function renderList() {
   const scroll = view.querySelector('.scroll.list') || h('div', { class: 'scroll list' })
-  put(scroll, 
+  const team = agents.filter(isTeam)
+  put(scroll,
     error ? h('div', { class: 'banner' }, `서버에 연결하지 못했습니다(${error}). 폴더에서 ./run.sh 로 다시 띄우세요.`) : null,
     !error && !agents.length ? h('div', { class: 'empty' }, '떠 있는 세션이 없습니다.') : null,
     agents.length ? SECTIONS.map(([key, title]) => {
-      const list = agents.filter(a => (a.section || 'wait') === key)
+      const list = team.filter(a => (a.section || 'wait') === key)
       const fold = key === 'done', open = !fold || doneOpen
       const head = [h('h2', {}, title), h('span', { class: 'num' }, list.length),
         fold ? h('span', { class: 'chev', 'aria-hidden': 'true' }, open ? '접기' : '펼치기') : null]
@@ -657,7 +677,8 @@ function renderList() {
           onclick() { doneOpen = !doneOpen; try { localStorage.setItem('doneOpen', doneOpen ? '1' : '0') } catch (e) {} renderList() }
         }, head) : h('div', { class: 'sec-h' }, head),
         open ? (list.length ? list.map(agentCard) : h('div', { class: 'sec-empty' }, '없음')) : null)
-    }) : null)
+    }) : null,
+    agents.length ? ['ao', 'other'].map(k => foldSection(k, agents.filter(a => !isTeam(a) && a.origin === k))) : null)
   if (!scroll.isConnected) put(view, scroll)
 }
 

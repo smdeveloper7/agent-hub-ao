@@ -27,7 +27,7 @@ MEMO = "\n## 메모\n\n<!-- 이 아래는 사람이 쓰는 곳입니다. 자동 
 
 STATUS_KO = {
     "created": "생성", "assigned": "배정", "working": "진행 중", "needs_input": "판단 대기",
-    "reported_done": "완료 보고(검증 전)", "verified_done": "완료(검증됨)", "verify_failed": "검증 실패",
+    "reported_done": "완료 보고(검증 전)", "verified_done": "완료(검증됨)", "verify_failed": "검증 실패", "needs_review": "확인 필요",
     "blocked": "막힘", "cancelled": "취소",
 }
 
@@ -337,7 +337,11 @@ class Vault:
                   "| 결과물 위치 | %s |" % (("`%s`" % t["workspace"]) if t.get("workspace") else "-"),
                   "| 커밋 | %s |" % (("`%s`" % t["commit_sha"]) if t.get("commit_sha") else "-")]
         lines += ["", "## 검증 (Main 이 직접 확인한 것)", ""]
-        if ver:
+        if ver and ver.get("manual"):
+            lines += ["- 확인 시각: %s" % short_time(ver.get("at")),
+                      "- 방법: 실행할 검증 명령이 없는 작업이라 사용자가 결과물을 보고 확인",
+                      "- 사용자 확인: %s" % (ver.get("note") or "-")]
+        elif ver:
             lines += ["- 확인 시각: %s" % short_time(ver.get("at")),
                       "- 명령: `%s` (작업 공간 `%s`)" % (ver.get("cmd"), ver.get("cwd")),
                       "- 결과: exit %s → %s" % (ver.get("exit_code"), "통과" if ver.get("passed") else "실패")]
@@ -349,6 +353,8 @@ class Vault:
                 lines.append("- 커밋 안 된 변경: " + md_cell(ver["dirty"], 300))
             if ver.get("output_tail"):
                 lines += ["", "```text", ver["output_tail"].strip()[-1500:], "```"]
+        elif t["status"] == "needs_review":
+            lines.append("- 검증 명령이 없어 사용자 확인을 기다립니다. 확인은 Main 에서 합니다(노트 수정으로는 완료되지 않음).")
         else:
             lines.append("- 아직 검증하지 않았습니다.")
         lines += ["", "## 보고만 받은 것 (검증 전)", ""]
@@ -459,9 +465,13 @@ class Vault:
             "  - type: table",
             "    name: 판단 대기",
             "    filters:",
-            "      and:",
-            '        - type == "ao-decision"',
-            '        - status == "open"',
+            "      or:",
+            "        - and:",
+            '            - type == "ao-decision"',
+            '            - status == "open"',
+            "        - and:",
+            '            - type == "ao-task"',
+            '            - status == "needs_review"',
             "    order:",
             "      - file.name",
             "      - project",
@@ -507,7 +517,7 @@ class Vault:
     def _raw_entries(self, store):
         """일일 로그에 남길 이벤트(완료 검증, 질문, 결정)를 한 번씩 덧붙인다."""
         for e in store.events():
-            if e["kind"] not in ("verified", "verify_failed", "question", "decision"):
+            if e["kind"] not in ("verified", "verify_failed", "accepted", "question", "decision"):
                 continue
             key = "raw:" + e["event_key"]
             if store.db.execute("SELECT 1 FROM meta WHERE key=?", (key,)).fetchone():
@@ -522,7 +532,14 @@ class Vault:
             entry = {"date": ts.strftime("%Y-%m-%d"), "time": ts.strftime("%H:%M"),
                      "agent": self.cfg.get("raw_agent") or "Claude", "project": t["project_id"]}
             tl = self.task_link(t["task_id"])
-            if e["kind"] in ("verified", "verify_failed"):
+            if e["kind"] == "accepted":
+                entry.update(status="완료", title="%s %s" % (t["task_id"], t["title"]),
+                             result="%s AO Supervisor %s 가 Worker %s(%s)에게 맡긴 작업. 검증 명령 없는 작업이라 사용자 확인으로 완료." % (
+                                 tl, t.get("supervisor_session") or "-",
+                                 ", ".join(json.loads(t.get("worker_sessions") or "[]")) or "-", t.get("worker_agent") or "-"),
+                             check="사용자 확인: %s. 보고 내용은 작업 노트 '보고만 받은 것'" % (payload.get("note") or "-"),
+                             next="없음")
+            elif e["kind"] in ("verified", "verify_failed"):
                 ok = e["kind"] == "verified"
                 entry.update(status="완료" if ok else "부분완료",
                              title="%s %s" % (t["task_id"], t["title"]),
