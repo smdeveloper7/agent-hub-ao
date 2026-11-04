@@ -1,284 +1,250 @@
-# agent-hub
+# agent-hub-ao
 
-Claude Code 세션 하나를 허브로 두고, 허브가 다른 세션들에 일을 나눠 맡기고 보고를 받아 기록하게 만드는 플러그인입니다. 허브가 따를 규칙 문서 틀과 세션 현황을 보는 로컬 대시보드, 허브 폴더를 지키는 훅이 함께 들어 있습니다.
+사용자는 Main Claude Code 세션 하나와만 대화합니다. Main 은 프로젝트별 [Agent Orchestrator](https://github.com/OrchestratorInc/agent-orchestrator)(AO) Supervisor 에 일을 맡기고, Supervisor 는 Claude Code 나 Codex Worker 에게 구현을 시킵니다. 결과와 Worker 질문은 Main 이 입력을 기다리는 동안에도 Main 대화창에 들어오고, 작업·결정·검증 근거는 Obsidian Vault 에 남습니다.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/architecture-dark.png">
-  <img alt="agent-hub 구성도: 사용자가 허브 세션에 지시하고, 허브가 슈퍼바이저와 작업 세션에 배정합니다. 허브는 허브 폴더에 기록하고 대시보드가 그 폴더를 읽습니다. 플러그인 훅 세 개가 허브 폴더 보호, 대시보드 열기, git 문구 검사를 맡습니다." src="docs/images/architecture-light.png" width="800">
-</picture>
+[holiday0726/claude-hub-plugin](https://github.com/holiday0726/claude-hub-plugin)(agent-hub)의 허브 운영 규칙, 배정·보고 형식, 작업 ID, 결정 기록, 대시보드를 그대로 쓰고 AO 연동과 Obsidian 기록을 더했습니다. AO 자체를 다시 만들거나 Main 을 다른 앱으로 바꾸지 않고, Claude Code 플러그인이 AO CLI 를 부릅니다.
+
+```mermaid
+flowchart TB
+    U[사용자] <-->|대화| M[Main Claude Code<br/>허브 폴더에서 연 세션]
+    M <-->|"배정·답변·지시 (aohub → ao send)"| S["AO 프로젝트별 Supervisor<br/>(orchestrator 세션)"]
+    S <-->|"ao spawn · ao send · ao report"| W["Coding Workers<br/>Claude Code · Codex"]
+    S -->|"sup-report (작업 ID)"| D[(상태 DB<br/>~/.claude-hub-ao)]
+    WT[aohub watch<br/>Main 세션 안의 감시 프로세스] -->|AO 상태·보고 다시 읽기, 직접 검증| D
+    WT -->|"[AO 알림]·[AO 질문] → 세션 inbox"| M
+    M -->|업무 요약·사용자 결정| D
+    D --> R[기록 모듈] -->|Markdown| V[(Obsidian Vault)]
+    V -.->|관련 프로젝트·결정 기록 참조| M
+    U -.->|현황 확인·메모| V
+```
+
+## 역할
+
+| 쪽 | 맡는 것 | 하지 않는 것 |
+|---|---|---|
+| Main | 업무 목표, 완료 조건, 사용자 질문과 결정, 종합 보고, 완료 판정 | Worker 직접 실행, 노트만 보고 실행 상태 판단 |
+| AO | Supervisor·Worker 세션의 실행 상태와 수명 주기, Worker 보고 전달 | 사용자 결정 |
+| Supervisor | Worker 배정·재지시, 기준이 있는 오류 처리, 판단이 필요하면 Main 에 질문 | 사용자 대신 결정, Vault·작업일지 기록 |
+| aohub | 작업 ID, 이벤트·전달 기록, 중복 방지, Main 알림, 노트 갱신(한 곳에서) | AO 를 우회한 세션 제어 |
+
+AO 로 맡긴 작업은 AO 로만 띄우고 멈춥니다. 같은 작업을 `claude --bg` 세션으로 겹쳐 맡기지 않습니다.
 
 ## 무엇이 들어 있나
 
 | 구성 | 위치 | 하는 일 |
 |---|---|---|
-| 허브 규칙 틀 | `templates/hub/` | 허브의 역할과 스킬 쓰는 때(`CLAUDE.md`), 세션 사이 약속과 보고 형식(`COORDINATION.md`), 현황판(`STATUS.md`)과 빈 데이터 파일 셋 |
-| 대시보드 | `dashboard/` | 떠 있는 세션, 사용자 결정, 현황, 세션 사이 메시지를 보여 주는 읽기 전용 웹 화면. Python 표준 라이브러리만 씁니다 |
-| 훅 | `hooks/` | 허브 폴더에서 세션을 열면 대시보드를 띄우고, 다른 세션이 허브 폴더를 고치지 못하게 막고, git 커밋 문구를 검사합니다 |
-| 스킬 | `skills/` | 설치 마무리 `setup`, 글을 사람이 쓴 것처럼 다듬는 `humanizer`, 커밋 문구 규칙 `git-message` |
-| 설치 스크립트 | `scripts/` | `setup` 스킬이 부르는 `setup_hub.py`. 허브 폴더 복사와 설정 합치기를 맡습니다 |
-| 설정 예시 | `examples/` | 허브와 슈퍼바이저 세션의 권한, 기본 모델 같은 설정 견본 |
-
-## 배정에서 보고까지
-
-사용자는 허브에게만 말합니다. 허브는 작업 세션을 띄워 `[배정]` 메시지를 보내고, 작업 세션은 일을 마치면 `[보고]` 를 보냅니다. 허브가 그 결과를 `STATUS.md` 에 적고 사용자 결정이 필요한 것은 `decisions.json` 에 모으면, 사용자는 대시보드에서 한 번에 확인합니다.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/flow-dark.png">
-  <img alt="배정에서 보고까지의 순서도: 사용자가 허브에 일을 맡기고, 허브가 세션을 등록하고 띄운 뒤 배정을 보냅니다. 작업 세션이 보고하면 허브가 STATUS.md 에 반영하고, 대시보드가 허브 폴더를 읽어 사용자에게 보여 줍니다." src="docs/images/flow-light.png" width="800">
-</picture>
+| AO 연동 | `aohub/`, `scripts/aohub.py` | 배정, 질문·답변, 후속 지시, 직접 검증, 감시, 재시작 복구 명령. Python 표준 라이브러리만 씁니다 |
+| AO 스킬 | `skills/ao/` | Main 운영 규칙: 세션을 열 때, 배정, 알림·질문 처리, 오류 처리, 하루 정리 |
+| 감시 훅 | `hooks/ao_watch_start.py` | 허브 폴더에서 세션을 열면 `aohub watch` 를 그 세션에 붙여 띄웁니다 |
+| 허브 규칙 틀 | `templates/hub/` | 허브 역할(`CLAUDE.md`), 세션 사이 약속과 보고 형식(`COORDINATION.md`), 현황판(`STATUS.md`)과 데이터 파일 |
+| 대시보드 | `dashboard/` | 세션, 사용자 결정, 현황, 세션 사이 메시지를 보여 주는 읽기 전용 웹 화면 |
+| 허브 훅 | `hooks/` | 대시보드 열기, 다른 세션의 허브 폴더 쓰기 막기, git 커밋 문구 검사 |
+| 스킬 | `skills/` | `setup`(설치 마무리), `ao`, `humanizer`, `git-message` |
+| 문서 | `docs/ao-bridge.md` | 연동 설계, 설치, 명령, 전달·중복 방지, 완료 판정, 재시작·오류 처리, 제약 |
 
 ## 빠른 시작
 
-Claude Code 와 Python 3.8 이상이 있으면 됩니다.
-Windows, Linux, macOS 모두 같은 방법입니다.
+필요한 것
 
-터미널(Windows 는 PowerShell)에서 GitHub 마켓플레이스로 플러그인을 설치합니다.
+- Claude Code 2.1.234 이상(native Windows 세션 inbox 기준. 개발과 시험은 2.1.318)
+- Python 3.8 이상
+- [Agent Orchestrator](https://orchestrator.inc/download/) 데스크톱 앱(데몬과 `ao` CLI 가 들어 있습니다. 시험은 0.14.8)
+- 쓰고 싶은 Worker CLI(Claude Code, Codex 등)와 그 로그인
+
+### 1. 플러그인 설치
 
 ```sh
-claude plugin install agent-hub --marketplace holiday0726/claude-hub-plugin
+claude plugin install agent-hub-ao --marketplace smdeveloper7/agent-hub-ao
 ```
 
-설치가 끝나면 설정값 `python` 과 `hub_dir` 가 비어 있다는 안내가 나옵니다.
-다음 단계에서 채웁니다.
+저장소를 받아 고쳐 쓰려면 받은 폴더를 마켓플레이스로 붙입니다. 플러그인은 그 폴더를 그대로 읽으니 설치 뒤 옮기지 않습니다.
 
-아무 폴더에서 `claude` 를 열고 설치 스킬을 부릅니다.
-
+```powershell
+git clone https://github.com/smdeveloper7/agent-hub-ao.git C:\Users\<나>\agent-hub-ao
+claude plugin marketplace add C:/Users/<나>/agent-hub-ao
+claude plugin install agent-hub-ao@agent-hub-ao `
+  --config python=C:/Users/<나>/AppData/Local/Programs/Python/Python313/python.exe `
+  --config hub_dir=C:/Users/<나>/hub
 ```
-/agent-hub:setup
+
+설정값을 비워 설치했다면 아무 폴더에서 `claude` 를 열고 `/agent-hub-ao:setup` 을 부릅니다. Python 을 찾고, 허브 폴더를 만들고, 플러그인 설정값을 채웁니다.
+
+### 2. AO 준비
+
+AO 앱을 열거나 앱 없이 `ao daemon` 을 띄웁니다. Windows 설치본의 CLI 는 `%LOCALAPPDATA%\Programs\agent-orchestrator\resources\daemon\ao.exe` 이고, PATH 에 없어도 aohub 가 찾습니다.
+
+맡길 저장소를 AO 프로젝트로 등록합니다.
+
+```sh
+ao project add --path <저장소> --id <프로젝트 id> --orchestrator-agent claude-code --worker-agent codex
+ao project set-config <프로젝트 id> --permission auto --orchestrator-agent claude-code --worker-agent codex --default-branch main
 ```
 
-스킬은 이 순서로 진행합니다.
-다시 불러도 결과가 같습니다.
+- `set-config` 는 설정을 통째로 바꿉니다. 플래그로 쓸 때는 필요한 값을 한 번에 다 줍니다.
+- 원격이 없는 저장소는 `--default-branch` 를 꼭 줍니다. 없으면 Supervisor 가 `idle` 로 보여도 시작하지 못합니다.
+- ChatGPT 계정 Codex 가 AO 기본 모델을 거부하면 Worker 모델을 지정합니다(`config.worker.agentConfig.model`). [docs/ao-bridge.md](docs/ao-bridge.md) 참고.
 
-1. Python 3.8 이상을 찾습니다.
-   Windows 는 `py -3` 을 먼저 보고, 없으면 `python` 을 봅니다.
-   훅이 셸 없이 실행하므로 Windows 에서는 `python.exe` 절대 경로를 설정값으로 씁니다.
-2. 허브 폴더를 묻습니다.
-   기본값은 홈 폴더 아래 `hub` 입니다.
-   `/agent-hub:setup C:/Users/<나>/hub` 처럼 바로 줘도 됩니다.
-3. 허브 폴더를 만들고 규칙 틀과 설정 예시를 복사합니다.
-   이미 있는 파일은 덮지 않습니다.
-4. 사용자 설정(`~/.claude/settings.json`)에 `crossSessionInbound: "accept"` 가 없으면 더합니다(`examples/user.settings.json`).
-   모델 같은 다른 설정은 건드리지 않습니다.
-   있는 값은 그대로 두고, 쓰기 전에 `settings.json.bak-<시각>` 으로 백업합니다.
-5. `agents.json` 에 허브 폴더 경로를 넣고, 플러그인 설정값 `python` 과 `hub_dir` 를 넣습니다.
-6. [Addy-skills](https://github.com/holiday0726/Addy-skills) 플러그인이 없으면 설치합니다.
+### 3. aohub 설정
 
-스킬이 끝나면 세션을 닫고 허브 폴더에서 새로 엽니다.
-설정값은 Claude Code 를 다시 열어야 적용됩니다.
+```sh
+python <플러그인 폴더>/scripts/aohub.py init --vault-dir <Obsidian Vault>
+python <플러그인 폴더>/scripts/aohub.py doctor
+```
+
+상태와 설정은 플러그인 폴더와 따로 `~/.claude-hub-ao` 에 둡니다(`AOHUB_HOME` 으로 변경). 일일 로그를 기존 기록 스크립트로 남기려면 `--raw-script <스크립트>` 를 줍니다.
+
+### 4. 허브 세션 열기
 
 ```sh
 cd ~/hub
 claude
 ```
 
-세션이 열리면서 `대시보드 http://127.0.0.1:4990 떠 있음` 이 보이면 브라우저로 그 주소를 엽니다.
-허브 세션 안에서 `/rename hub` 를 입력합니다.
-그다음 [허브 폴더 만들기](#허브-폴더-만들기) 의 1, 2, 5 번대로 `<...>` 자리를 채웁니다.
+세션이 열리면 훅이 감시 프로세스를 이 세션에 붙이고, 대시보드(http://127.0.0.1:4990)를 띄웁니다. 세션 안에서 `/rename hub` 를 한 번 입력합니다.
 
-새 판은 `claude plugin marketplace update agent-hub` 와 `claude plugin update agent-hub@agent-hub` 로 받고, 세션을 다시 엽니다.
+## 쓰는 법
 
-## 손으로 설치하기
+새 화면은 없습니다. Main 대화창이 쓰는 곳입니다.
 
-설치 스킬을 쓰지 않거나, 저장소를 받아 고쳐 쓰려면 이렇게 합니다.
-
-Claude Code, git, Python 3.8 이상이 필요합니다. 저장소 폴더가 그대로 로컬 마켓플레이스라서 받은 폴더를 마켓플레이스로 붙이고 그 안의 `agent-hub` 플러그인을 설치합니다.
-
-### Windows
-
-훅은 셸을 거치지 않고 설정값 `python` 을 그대로 실행합니다. 그래서 Windows 에서는 `python.exe` 의 절대 경로를 넣습니다. PowerShell 에서 경로를 확인합니다.
-
-```powershell
-py -3 -c "import sys; print(sys.executable)"
-# py 런처가 없으면: python -c "import sys; print(sys.executable)"
+```
+나: ao-demo-a 에 multiply 함수 추가 맡겨줘. 시험 통과가 완료 조건이야.
+Main: T-20261104-01 로 Supervisor ao-demo-a-4 에 배정했습니다(도착 확인).
+      … (입력하지 않아도 결과가 들어옵니다)
+Main: [AO 알림] T-20261104-01 완료 검증 통과. Worker 작업 공간에서 시험을 직접 돌려 4개 통과, 커밋 aa0d8c7.
+Main: [AO 질문] Q-20261104-01 divide 에서 0 으로 나누면 어떻게 할까요? (ValueError / 기본 오류 / None)
+나: ValueError 로
+Main: Supervisor 에 전달했고 도착을 확인했습니다. 결정과 이유를 기록했습니다.
 ```
 
-출력된 경로의 역슬래시를 `/` 로 바꿔 설치에 씁니다. 경로에 빈칸이 있으면 `"python=C:/Program Files/Python312/python.exe"` 처럼 따옴표로 묶습니다.
+| 화면 | 용도 |
+|---|---|
+| Main 대화창 | 맡기기, 결과·질문 받기, 답하기, "AO 작업 상태 알려줘", "오늘 작업 정리해줘" |
+| Obsidian | `wiki/AO 현황.base`(프로젝트 현황, 판단 대기, 완료 작업, 결정 기록), 작업·결정·프로젝트 노트. 메모를 더해도 보존됩니다 |
+| AO 데스크톱 앱 | Supervisor·Worker 세션을 직접 보고 싶을 때(선택) |
+| 허브 대시보드 | `claude --bg` 로 띄운 허브 세션 현황(AO 작업은 Main 과 Obsidian 에서 봅니다) |
 
-```powershell
-cd $HOME
-git clone https://github.com/holiday0726/claude-hub-plugin.git
-claude plugin marketplace add C:/Users/<나>/claude-hub-plugin
-claude plugin install agent-hub@agent-hub `
-  --config python=C:/Users/<나>/AppData/Local/Programs/Python/Python312/python.exe `
-  --config hub_dir=C:/Users/<나>/hub
-```
+Main 이 쓰는 명령은 `/agent-hub-ao:ao` 스킬에 있고, 사용자가 직접 칠 일은 없습니다. 자주 쓰는 것:
 
-Claude Code 세션 안에서 설치해도 됩니다. `/plugin marketplace add C:/Users/<나>/claude-hub-plugin`, `/plugin install agent-hub@agent-hub` 를 차례로 입력한 뒤 `/plugin configure agent-hub@agent-hub` 창에서 `python` 과 `hub_dir` 를 채웁니다.
+| 명령 | 하는 일 |
+|---|---|
+| `aohub assign --project --title --request --done --verify [--worker-agent]` | 작업 ID 발급, 프로젝트당 Supervisor 하나 유지, 배정 도착 확인 |
+| `aohub status [작업]` | 기록과 AO 에 방금 다시 물은 세션 상태 |
+| `aohub questions` / `answer <Q> --text --reason` | 판단 대기 목록, 사용자 답 전달과 결정 기록 |
+| `aohub tell <작업> --text` | 같은 작업의 Supervisor 에 후속 지시 |
+| `aohub resume` | Main 재시작 뒤 진행 중 작업, 미처리 질문·알림, 읽을 노트 |
+| `aohub daily` | 오늘 AO 작업 정리와 `wiki/log.md` 한 줄 |
 
-### Linux, macOS
+전체 명령과 옵션은 [docs/ao-bridge.md](docs/ao-bridge.md) 에 있습니다.
+
+## 완료와 오류
+
+완료는 Main 이 판정합니다. 전송 성공, 세션 idle, 프로세스 종료, Worker·Supervisor 의 done 보고는 완료가 아닙니다. 감시 프로세스가 Worker 작업 공간에서 검증 명령을 직접 돌려 통과하고 커밋이 있어야 `완료(검증됨)` 입니다. 보고 원문은 노트에 "보고만 받은 것" 으로 따로 둡니다.
+
+오류는 기준이 있으면 Supervisor, 판단이 필요하면 Main(사용자)이 맡습니다.
+
+| 오류 | 처리 |
+|---|---|
+| Worker 실행 실패, 모델 미지원, 시험·검증 실패 | Supervisor 가 `aohub worker-state` 로 직접 잡아 `error_policy` 기준대로 다시 띄우거나 다시 지시합니다(재시도 횟수, 대체 모델) |
+| 재시도 소진, 기준에 없는 오류, 권한 승인, AO 설정 변경, 범위 변경 | Supervisor 가 `blocked`·`question` 으로 Main 에 올리고, Main 이 사용자에게 묻습니다 |
+| Supervisor 무응답 | Main 감시가 안전망으로 유예 뒤 Supervisor 에 알리고, 그래도 처리 보고가 없으면 Main 에 알립니다 |
+
+`[답변]` 은 업무 결정일 뿐 도구 권한 승인이 아닙니다. 노트의 상태나 체크박스를 바꿔도 작업이 재개되거나 승인되지 않습니다.
+
+## Obsidian 기록
+
+기록 모듈 하나(`aohub/vault.py`)가 상태 DB 를 다시 그려 노트를 만들어서, 같은 이벤트를 다시 받아도 기록이 늘지 않습니다. Worker 와 Supervisor 는 노트를 쓰지 않습니다.
+
+| 노트 | 내용 |
+|---|---|
+| `raw/YYYY-MM-DD.md` | 완료 검증, 질문, 결정을 한 건씩. 작업 노트 링크 포함 |
+| `wiki/tasks/<작업 ID>.md` | Properties(프로젝트, Supervisor·Worker 세션, 상태, 확인 시각, 완료 조건, 결과물, 커밋, 검증 여부), 검증 근거, 보고만 받은 것, 진행 기록 |
+| `wiki/decisions/<질문 ID>.md` | 질문, 선택지, 질문 경로, 답, 이유, 전달 확인 |
+| `wiki/projects/<프로젝트>.md` | AO 작업 표, 판단 대기, 최근 결정 |
+| `wiki/AO 현황.base` | Obsidian Bases 보기 |
+
+자동으로 고치는 곳은 맡은 Properties 키와 `<!-- aohub:begin … -->` 구역뿐입니다. 그 밖의 본문과 사용자가 더한 Properties 는 그대로 둡니다.
+
+## 시험
 
 ```sh
-git clone https://github.com/holiday0726/claude-hub-plugin.git ~/claude-hub-plugin
-claude plugin marketplace add ~/claude-hub-plugin
-claude plugin install agent-hub@agent-hub --config python=python3 --config hub_dir="$HOME/hub"
+python tests/test_aohub.py            # AO 연동 Mock 시험(가짜 AO, 임시 Vault)
+python tests/test_setup_hub.py        # 설치 스크립트
+python tests/test_open_dashboard.py   # 대시보드 훅
+python tests/test_style_basic.py      # git 문구 규칙
+python tests/test_style_multi.py
+python dashboard/test_server.py
+claude plugin validate --strict .
 ```
 
-### 함께 설치할 플러그인
+Windows 에서 실제 AO 0.14.8 과 Claude Code 2.1.318 로 확인한 것은 다음과 같습니다. 명령과 결과는 [docs/ao-bridge.md](docs/ao-bridge.md) 에 있습니다.
 
-허브 규칙 틀의 `CLAUDE.md` "스킬 쓰는 때" 절은 [Addy-skills](https://github.com/holiday0726/Addy-skills) 플러그인의 스킬을 부릅니다.
-배정과 보고를 감독하는 스킬 일곱 개(`addy-skills:agent-oversight` 와 그 아래 스킬)입니다.
-`STATUS.md` 의 네 원칙과 `COORDINATION.md` 의 보고 형식도 이 스킬을 따릅니다.
-agent-hub 와 함께 설치합니다.
+| 시나리오 | 결과 |
+|---|---|
+| 배정 → Supervisor → Worker → 결과 → Main 보고 | Claude Code·Codex Worker 모두 확인, Main 이 작업 공간에서 시험 재실행 |
+| 질문 → Main → 사용자 답 → 전달 → 재개 | Supervisor transcript 에서 답 도착 확인, 결정 노트·일일 로그 기록 |
+| 입력 대기 중인 Main 의 자동 수신 | 알림이 새 turn 으로 시작됨 |
+| 두 프로젝트 동시 배정 | 세션·커밋·기록이 섞이지 않음 |
+| 전송 불확실·재수신 | 재전송 전 AO 전달 기록과 transcript 확인, 같은 작업·Worker·기록이 다시 생기지 않음 |
+| Main·감시 프로세스 재시작 | 새 Main 이 `resume` 으로 진행 중 작업, 열린 질문, 이전 결정 이유를 찾음 |
+| Supervisor 의 Worker 오류 처리 | 모델 미지원으로 실패한 Codex Worker 를 Supervisor 가 대체 모델로 다시 띄움 |
 
-```sh
-claude plugin install addy-skills --marketplace holiday0726/Addy-skills
-```
+`tests/test_hub_only_write.py` 는 원본 저장소에서도 실패하는 상태로 가져왔습니다.
 
-Claude Code 세션 안에서는 이렇게 입력합니다.
+## 알려진 제약
 
-```
-/plugin install addy-skills --marketplace holiday0726/Addy-skills
-```
+- inbox 메시지 형식(auth 줄 다음 user 줄)은 공식 문서에 auth 줄만 있고, 메시지 줄은 Claude Code 2.1.318 에서 확인했습니다. Claude Code 판이 바뀌면 다시 확인합니다.
+- inbox 쓰기 성공은 전달 통로에 들어갔다는 뜻입니다. Main 이 처리했는지는 `aohub ack` 로 기록합니다.
+- 감시는 5초 주기 조회입니다. AO SSE 이벤트는 쓰지 않습니다.
+- Supervisor 규칙(`orchestratorRules`)은 Supervisor 를 띄울 때만 들어갑니다. 바꾼 규칙은 다음 Supervisor 부터, 배정 메시지 안의 기준은 바로 적용됩니다.
+- Supervisor 와 Worker 도 사용자 전역 `~/.claude/CLAUDE.md` 를 읽습니다. 전역 규칙과 연동 규칙이 부딪히면 연동 규칙에 금지 문구를 더합니다.
 
-`claude plugin details addy-skills@addy-skills` 에 스킬 일곱 개가 보이면 설치된 것입니다.
+## 허브 기본 기능
 
-### 설치 확인과 갱신
-
-```sh
-claude plugin details agent-hub@agent-hub    # Skills (3), Hooks (2) 가 보이면 설치된 것
-```
-
-플러그인은 받은 폴더를 그대로 읽습니다. 설치한 뒤에는 그 폴더를 옮기거나 지우지 마세요. 새 판을 받을 때는 그 폴더에서 `git pull` 한 뒤 세션을 다시 열거나 세션 안에서 `/reload-plugins` 를 입력합니다.
-
-인터넷이 안 되는 PC 라면 다른 곳에서 묶어 옮깁니다.
-
-```sh
-cd claude-hub-plugin
-git bundle create ../agent-hub.bundle HEAD main      # 받는 쪽: git clone agent-hub.bundle claude-hub-plugin
-git archive --format=zip -o ../agent-hub.zip main    # 받는 쪽: 압축을 풀기만 하면 됨
-```
-
-### 설정값
-
-설치할 때 `--config 키=값` 으로 주고, 나중에는 `claude plugin configure agent-hub@agent-hub` 나 세션 안 `/plugin configure agent-hub@agent-hub` 로 바꿉니다.
-
-| 키 | 필수 | 뜻 | 기본값 |
-|---|---|---|---|
-| `python` | 예 | 훅을 돌릴 Python 3 명령. Linux 와 macOS 는 `python3`, Windows 는 `python.exe` 절대 경로 | 없음 |
-| `hub_dir` | 예 | 허브 폴더의 절대 경로. Windows 는 `C:/Users/<나>/hub` 처럼 `/` 로 씁니다 | 없음 |
-| `dashboard_port` | 아니오 | 대시보드 포트. 주소는 늘 `127.0.0.1` 입니다 | `4990` |
-| `orca` | 아니오 | 허브 세션을 열 때 Orca 브라우저 탭으로 대시보드를 열지 | 켬(`orca` 명령이 있을 때만) |
-
-## 허브 폴더 만들기
-
-허브 폴더는 허브 세션을 여는 폴더이고, 설정값 `hub_dir` 와 같은 경로여야 합니다. 규칙 틀과 설정 예시를 복사합니다.
-`/agent-hub:setup` 을 썼다면 아래 복사와 3, 4 번은 이미 되어 있습니다.
-
-Linux, macOS:
-
-```sh
-mkdir -p ~/hub/.claude
-cp ~/claude-hub-plugin/templates/hub/* ~/hub/
-cp ~/claude-hub-plugin/examples/hub.settings.json ~/hub/.claude/settings.json
-cp ~/claude-hub-plugin/examples/supervisor.settings.json ~/hub/supervisor.settings.json
-```
-
-Windows PowerShell:
-
-```powershell
-$hub = "C:\Users\<나>\hub"; $src = "C:\Users\<나>\claude-hub-plugin"
-New-Item -ItemType Directory -Force "$hub\.claude" | Out-Null
-Copy-Item "$src\templates\hub\*" $hub
-Copy-Item "$src\examples\hub.settings.json" "$hub\.claude\settings.json"
-Copy-Item "$src\examples\supervisor.settings.json" "$hub\supervisor.settings.json"
-```
-
-복사한 뒤 프로젝트에 맞게 채웁니다. 권한과 기본 모델은 플러그인이 넣어 줄 수 없어서 이렇게 예시 파일로 둡니다.
-
-1. `.claude/settings.json`: 허브 세션의 모델과 권한입니다. `deny` 의 `<레인 저장소>` 자리에 허브가 직접 고치면 안 되는 저장소를, `additionalDirectories` 에 그 저장소들의 상위 폴더를 넣습니다.
-2. `supervisor.settings.json`: 허브가 슈퍼바이저 세션을 띄울 때 `--settings` 로 붙이는 파일입니다. 슈퍼바이저에게 허락할 일을 `autoMode.allow` 에 문장으로 적습니다.
-3. 사용자 설정(`~/.claude/settings.json`, Windows 는 `%USERPROFILE%\.claude\settings.json`)에 `examples/user.settings.json` 의 키를 손으로 합칩니다. `crossSessionInbound: "accept"` 가 있어야 세션 사이 메시지가 승인 대기 없이 바로 전달됩니다.
-4. `agents.json` 의 `resident.hub.cwd` 에 허브 폴더 경로를 넣고, 허브 세션 안에서 `/rename hub` 로 이름을 맞춥니다. 대시보드는 이 파일에서 `lane` 이 `HUB` 인 세션을 허브로 봅니다.
-5. `CLAUDE.md` 와 `COORDINATION.md` 의 `<...>` 자리에 레인, 저장소, 인터페이스를 적습니다.
-
-## 대시보드
-
-허브 폴더의 `agents.json`, `decisions.json`, `STATUS.md`, `dev-occupancy.json` 과 `~/.claude` 아래 세션 기록을 몇 초마다 읽어 보여 줍니다. 읽기만 하고, 세션에 입력을 보내거나 멈추지 않습니다.
+원본 agent-hub 의 기능은 그대로 있습니다. AO 를 쓰지 않는 일은 예전처럼 `claude --bg` 세션에 배정하고 대시보드로 봅니다.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.png">
   <img alt="대시보드 에이전트 탭: 위에 사용량과 dev 점유 줄, 아래에 진행 중, 입력 대기 세션 카드" src="docs/images/dashboard-light.png" width="480">
 </picture>
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-flow-dark.png">
-  <img alt="대시보드 흐름 탭: 허브를 가운데 두고 세션 사이에 오간 배정과 보고를 그린 그래프" src="docs/images/dashboard-flow-light.png" width="480">
-</picture>
-
-화면의 세션과 데이터는 설명용 견본입니다.
-
-| 탭 | 보여 주는 것 |
-|---|---|
-| 에이전트 | 세션을 진행 중, 입력 대기, 종료로 나눈 카드. 누르면 대화 기록과 `claude logs` 화면 |
-| 결정 | `decisions.json` 의 결정 항목과 지금 사용자 입력을 기다리는 세션 |
-| 현황 | `STATUS.md` |
-| 흐름 | 세션 사이 `SendMessage` 를 그래프와 목록으로. `[배정]`, `[보고]`, `[알림]` 머리말로 종류를 나눕니다 |
-| 할 일 | 세션별 할 일 목록 |
-
-허브 폴더에서 세션을 열면 훅이 대시보드를 띄워 주므로 따로 실행할 일은 없습니다. 손으로 띄울 때는 허브 폴더와 포트를 환경변수로 줍니다.
-
-```sh
-HUB_DIR=~/hub PORT=4990 python3 ~/claude-hub-plugin/dashboard/server.py
-```
-
-```powershell
-$env:HUB_DIR = "C:\Users\<나>\hub"; $env:PORT = "4990"; py -3 C:\Users\<나>\claude-hub-plugin\dashboard\server.py
-```
-
-훅이 띄운 서버의 로그는 `~/.claude/plugins/data/agent-hub-agent-hub/dashboard-<포트>.log` 에 남고, 첫 줄에 서버 pid 가 있습니다. 끌 때는 그 pid 로 `kill <pid>`(Windows 는 `Stop-Process -Id <pid>`)를 실행합니다. 화면 하나하나의 설명은 [dashboard/README.md](dashboard/README.md) 에 있습니다.
-
-## 훅
-
-`hooks/hooks.json` 은 셸을 거치지 않는 형식이라 Windows 에서 Git Bash 를 쓰든 PowerShell 을 쓰든 똑같이 돕니다. 훅 스크립트는 모두 Python 입니다.
 
 | 훅 | 언제 | 하는 일 |
 |---|---|---|
-| 대시보드 열기 (`open_dashboard.py`) | 세션 시작(SessionStart) | 프로젝트 폴더가 `hub_dir` 이거나 그 아래일 때만 동작합니다. 대시보드가 꺼져 있으면 띄우고, `orca` 가 켜져 있으면 Orca 탭으로 엽니다 |
-| 허브 폴더 보호 (`hub_only_write.py`) | Edit, Write, NotebookEdit 직전 | 허브 폴더 밖에서 연 세션이 허브 폴더의 파일을 고치려 하면 막고, 허브에 보고하라고 알립니다. Windows 경로는 대소문자와 역슬래시, `/c/` 꼴을 같은 경로로 봅니다 |
-| git 문구 검사 (`git-message-style.py`) | Bash, PowerShell 명령 직전 | `git commit`, `merge`, `tag`, `revert` 와 `gh pr create`, `edit` 문구가 개조식 규칙을 어기면 막습니다. 잠시 끄려면 환경변수 `CLAUDE_GIT_STYLE=off` |
+| `open_dashboard.py` | 세션 시작 | 허브 폴더에서 열리면 대시보드를 띄우고, `orca` 가 켜져 있으면 Orca 탭으로 엽니다 |
+| `ao_watch_start.py` | 세션 시작 | 허브 폴더에서 열리고 aohub 가 설정되어 있으면 감시 프로세스를 그 세션에 붙입니다 |
+| `hub_only_write.py` | Edit, Write 직전 | 허브 폴더 밖 세션이 허브 폴더 파일을 고치지 못하게 막습니다 |
+| `git-message-style.py` | Bash, PowerShell 직전 | git 커밋·PR 문구가 개조식 규칙을 어기면 막습니다(`CLAUDE_GIT_STYLE=off` 로 잠시 끔) |
 
-## 스킬
+| 설정값 | 필수 | 뜻 | 기본값 |
+|---|---|---|---|
+| `python` | 예 | 훅을 돌릴 Python. Windows 는 `python.exe` 절대 경로 | 없음 |
+| `hub_dir` | 예 | 허브 폴더 절대 경로 | 없음 |
+| `dashboard_port` | 아니오 | 대시보드 포트 | `4990` |
+| `orca` | 아니오 | Orca 탭으로 대시보드 열기 | 켬 |
+| `ao_watch` | 아니오 | 허브 세션에 AO 감시 프로세스 붙이기 | 켬 |
 
-| 스킬 | 부르는 법 | 쓰임 |
-|---|---|---|
-| setup | `/agent-hub:setup [허브 폴더]` | 설치를 마무리합니다. 허브 폴더를 만들고 사용자 설정과 플러그인 설정값을 채웁니다. [빠른 시작](#빠른-시작) 참고 |
-| humanizer | `/agent-hub:humanizer` | AI 가 쓴 티가 나는 문장을 고칩니다. 허브의 `STATUS.md` 와 결정 문구를 다듬을 때 씁니다 |
-| git-message | `/agent-hub:git-message` | 커밋, 머지, PR 문구를 개조식으로 쓰는 규칙. git 문구 검사 훅이 막았을 때 같이 봅니다 |
+허브 폴더 구성, 대시보드 화면, 설정 예시는 [templates/hub/CLAUDE.md](templates/hub/CLAUDE.md), [dashboard/README.md](dashboard/README.md), [examples/](examples/) 에 있습니다. 허브 규칙의 감독 스킬은 [Addy-skills](https://github.com/holiday0726/Addy-skills) 플러그인을 함께 설치해 씁니다(`/agent-hub-ao:setup` 이 설치).
 
 ## 저장소 구조
 
 ```
 .claude-plugin/   plugin.json, marketplace.json
+aohub/            AO 연동(config, store, ao, inbox, vault, bridge, cli)
 dashboard/        server.py, index.html, test_server.py, vendor/
-docs/             README 그림(images/)과 그림 원본(diagrams/)
+docs/             ao-bridge.md, README 그림(images/)과 원본(diagrams/)
 examples/         hub.settings.json, supervisor.settings.json, user.settings.json
-hooks/            hooks.json, open_dashboard.py, hub_only_write.py, git-message-style.py, hubpath.py
-scripts/          setup_hub.py
-skills/           setup/, humanizer/, git-message/
+hooks/            hooks.json, open_dashboard.py, ao_watch_start.py, hub_only_write.py, git-message-style.py, hubpath.py
+scripts/          aohub.py, setup_hub.py
+skills/           ao/, setup/, humanizer/, git-message/
 templates/hub/    CLAUDE.md, COORDINATION.md, STATUS.md, agents.json, decisions.json, dev-occupancy.json
-tests/            훅과 설치 스크립트 시험
+tests/            test_aohub.py 와 허브 훅·설치 스크립트 시험
 ```
-
-## 시험 돌리기
-
-```sh
-python3 dashboard/test_server.py        # 대시보드 서버
-python3 tests/test_hub_only_write.py    # 허브 폴더 보호, Windows 경로 꼴 포함
-python3 tests/test_style_basic.py       # git 문구 기본 규칙
-python3 tests/test_style_multi.py       # 한 명령에 git 명령이 여럿일 때
-python3 tests/test_open_dashboard.py    # 대시보드 열기 훅, 빈 포트에 서버를 띄웠다가 끕니다
-python3 tests/test_setup_hub.py         # 설치 스크립트, 임시 폴더와 가짜 HOME 으로만 돕니다
-claude plugin validate --strict .       # 매니페스트 검사
-```
-
-Windows 에서는 `python3` 자리에 `py -3` 을 씁니다. 훅 시험은 Windows 한국어 로캘과 같은 조건(표준 입출력 기본값 cp949)으로 돌아갑니다.
 
 ## 라이선스와 출처
 
-MIT 라이선스입니다([LICENSE](LICENSE)). 함께 넣은 것은 각자의 라이선스를 따릅니다.
+MIT 라이선스입니다([LICENSE](LICENSE)).
 
-- `skills/humanizer`: [blader/humanizer](https://github.com/blader/humanizer), MIT, `skills/humanizer/LICENSE`
-- `dashboard/vendor/xterm.js`, `xterm.css`: [xterm.js](https://github.com/xtermjs/xterm.js) 5.5.0, MIT, `dashboard/vendor/xterm-LICENSE`
-- `dashboard/vendor/WantedSansVariable.woff2`: [Wanted Sans](https://github.com/wanteddev/wanted-sans) 1.0.3, SIL OFL 1.1, `dashboard/vendor/WantedSans-OFL.txt`
-
-README 의 구성도는 diagram-design, 순서도는 [Archify](https://github.com/tt-a1i/archify) 로 그렸고 원본은 `docs/diagrams/` 에 있습니다.
+- 허브 규칙 틀, 대시보드, 허브 훅, setup·git-message 스킬: [holiday0726/claude-hub-plugin](https://github.com/holiday0726/claude-hub-plugin), MIT
+- `skills/humanizer`: [blader/humanizer](https://github.com/blader/humanizer), MIT
+- `dashboard/vendor/xterm.js`, `xterm.css`: [xterm.js](https://github.com/xtermjs/xterm.js) 5.5.0, MIT
+- `dashboard/vendor/WantedSansVariable.woff2`: [Wanted Sans](https://github.com/wanteddev/wanted-sans) 1.0.3, SIL OFL 1.1
+- 연동 대상: [Agent Orchestrator](https://github.com/OrchestratorInc/agent-orchestrator), Apache-2.0(코드를 포함하지 않고 CLI 만 부릅니다)

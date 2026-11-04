@@ -1,16 +1,16 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
-  "name": "agent-hub",
-  "description": "허브와 슈퍼바이저 체계 플러그인 하나를 담은 로컬 마켓플레이스",
+  "name": "agent-hub-ao",
+  "description": "agent-hub-ao 플러그인 하나를 담은 마켓플레이스",
   "owner": {
-    "name": "holiday0726"
+    "name": "smdeveloper7"
   },
   "plugins": [
     {
-      "name": "agent-hub",
+      "name": "agent-hub-ao",
       "source": "./",
-      "version": "0.3.0",
-      "description": "에이전트 대시보드, 허브 폴더 쓰기 보호와 git 문구 검사 훅, 설치 스킬 setup, humanizer와 git-message 스킬",
+      "version": "0.4.0",
+      "description": "Agent Orchestrator 연동(aohub)과 Obsidian 기록을 더한 허브·슈퍼바이저 플러그인",
       "license": "MIT"
     }
   ]

@@ -1,18 +1,18 @@
 ---
 name: setup
-description: agent-hub 를 설치한 뒤 한 번 돌리는 설치 마무리. Python 경로를 찾고, 허브 폴더를 만들어 규칙 틀과 설정 예시를 복사하고, 사용자 설정에 필요한 키를 합치고, 플러그인 설정값 python 과 hub_dir 를 넣고, addy-skills 를 설치한다.
+description: agent-hub-ao 를 설치한 뒤 한 번 돌리는 설치 마무리. Python 경로를 찾고, 허브 폴더를 만들어 규칙 틀과 설정 예시를 복사하고, 사용자 설정에 필요한 키를 합치고, 플러그인 설정값 python 과 hub_dir 를 넣고, addy-skills 를 설치한다.
 argument-hint: "[허브 폴더 경로]"
 disable-model-invocation: true
 ---
 
-# agent-hub 설치 마무리
+# agent-hub-ao 설치 마무리
 
-사용자가 `/agent-hub:setup` 을 불렀다.
+사용자가 `/agent-hub-ao:setup` 을 불렀다.
 아래 순서대로 진행하고, 각 단계의 명령과 출력을 사용자에게 보여 준다.
 한 단계가 실패하면 거기서 멈추고 무엇이 실패했는지 알린다.
 
 이 플러그인 폴더는 `${CLAUDE_PLUGIN_ROOT}` 이다.
-이 문자열이 경로로 바뀌지 않고 그대로 보이면 `claude plugin list --json` 에서 `agent-hub@` 로 시작하는 항목의 `installPath` 를 대신 쓴다.
+이 문자열이 경로로 바뀌지 않고 그대로 보이면 `claude plugin list --json` 에서 `agent-hub-ao@` 로 시작하는 항목의 `installPath` 를 대신 쓴다.
 
 ## 1. Python 찾기
 
@@ -76,11 +76,11 @@ Windows 의 `python` 이 Microsoft Store 설치 안내만 띄우고 끝나는 �
 먼저 지금 값을 본다.
 
 ```
-claude plugin configure agent-hub@agent-hub --json
+claude plugin configure agent-hub-ao@agent-hub-ao --json
 ```
 
 `inputs` 의 `python` 이나 `hub_dir` 에 이미 다른 값이 있으면 바꿀지 사용자에게 묻는다.
-플러그인 이름이 `agent-hub@agent-hub` 가 아니면 `claude plugin list --json` 에서 찾은 이름을 쓴다.
+플러그인 이름이 `agent-hub-ao@agent-hub-ao` 가 아니면 `claude plugin list --json` 에서 찾은 이름을 쓴다.
 
 값을 넣는다.
 JSON 의 값은 한 줄 문자열이어야 하고, 경로에 `"` 가 있으면 `\"` 로 바꾼다.
@@ -91,13 +91,13 @@ JSON 의 값은 한 줄 문자열이어야 하고, 경로에 `"` 가 있으면 `
 Bash:
 
 ```
-printf '%s' '{"python":"<1단계 값>","hub_dir":"<3단계 hub_dir>"}' | claude plugin configure agent-hub@agent-hub --values-stdin
+printf '%s' '{"python":"<1단계 값>","hub_dir":"<3단계 hub_dir>"}' | claude plugin configure agent-hub-ao@agent-hub-ao --values-stdin
 ```
 
 PowerShell:
 
 ```
-'{"python":"<1단계 값>","hub_dir":"<3단계 hub_dir>"}' | claude plugin configure agent-hub@agent-hub --values-stdin
+'{"python":"<1단계 값>","hub_dir":"<3단계 hub_dir>"}' | claude plugin configure agent-hub-ao@agent-hub-ao --values-stdin
 ```
 
 `Configuration saved` 가 보이면 된 것이다.

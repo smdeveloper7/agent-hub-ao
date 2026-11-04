@@ -1,13 +1,20 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
-  "name": "agent-hub",
-  "version": "0.3.0",
-  "description": "허브와 슈퍼바이저 체계: 에이전트 대시보드, 허브 폴더 쓰기 보호와 git 문구 검사 훅, 설치 스킬 setup, humanizer와 git-message 스킬",
+  "name": "agent-hub-ao",
+  "version": "0.4.0",
+  "description": "Main Claude Code 가 Agent Orchestrator 프로젝트 Supervisor 에 일을 맡기고 결과·질문을 받아 Obsidian 에 기록하는 허브 플러그인(holiday0726/claude-hub-plugin 확장): aohub 연동, 감시 훅, 대시보드, 허브 폴더 보호와 git 문구 검사 훅, setup·ao·humanizer·git-message 스킬",
   "author": {
-    "name": "holiday0726"
+    "name": "smdeveloper7"
   },
   "license": "MIT",
-  "keywords": ["hub", "supervisor", "dashboard", "hooks"],
+  "keywords": [
+    "agent-orchestrator",
+    "dashboard",
+    "hooks",
+    "hub",
+    "obsidian",
+    "supervisor"
+  ],
   "userConfig": {
     "python": {
       "type": "string",
@@ -34,6 +41,14 @@
       "title": "Orca 탭 열기",
       "description": "허브 세션이 열릴 때 orca 명령이 있으면 대시보드를 Orca 브라우저 탭으로 엽니다. 설정하지 않으면 켜짐입니다.",
       "default": true
+    },
+    "ao_watch": {
+      "type": "boolean",
+      "title": "AO 감시 자동 시작",
+      "description": "허브 폴더에서 세션이 열리면 aohub 감시 프로세스를 그 세션에 붙여 띄웁니다. ~/.claude-hub-ao/config.json 이 있을 때만 동작합니다. 설정하지 않으면 켜짐입니다.",
+      "default": true
     }
-  }
+  },
+  "homepage": "https://github.com/smdeveloper7/agent-hub-ao",
+  "repository": "https://github.com/smdeveloper7/agent-hub-ao"
 }

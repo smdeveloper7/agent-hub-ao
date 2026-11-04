@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """허브 폴더 설치: python3 scripts/setup_hub.py <허브 폴더> [--config-dir <Claude 설정 폴더>]
 
-/agent-hub:setup 스킬이 부른다. 다시 돌려도 결과가 같다.
+/agent-hub-ao:setup 스킬이 부른다. 다시 돌려도 결과가 같다.
 1. 허브 폴더를 만들고 templates/hub/* 와 설정 예시 둘을 복사한다. 있는 파일은 덮지 않는다.
 2. 사용자 설정(<설정 폴더>/settings.json)에 examples/user.settings.json 의 키 중 없는 것만 더한다. 쓰기 전에 백업한다.
 3. agents.json 의 resident.hub.cwd 가 비어 있으면 허브 폴더 경로를 넣는다.
@@ -98,7 +98,7 @@ def fill_roster(hub):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description='agent-hub 허브 폴더 설치')
+    ap = argparse.ArgumentParser(description='agent-hub-ao 허브 폴더 설치')
     ap.add_argument('hub', help='허브 폴더 경로')
     ap.add_argument('--config-dir', help='Claude 설정 폴더. 기본은 CLAUDE_CONFIG_DIR 또는 ~/.claude')
     a = ap.parse_args(argv)

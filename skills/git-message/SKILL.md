@@ -63,7 +63,7 @@ feature/gold 병합 - 골드 DAG 자산 연쇄
 
 ## 강제 장치
 
-agent-hub 플러그인의 `hooks/git-message-style.py` 가 `PreToolUse` 에서 `git` 의 commit·merge·tag·revert 와
+agent-hub-ao 플러그인의 `hooks/git-message-style.py` 가 `PreToolUse` 에서 `git` 의 commit·merge·tag·revert 와
 `gh pr` 의 create·edit 을 검사하고 위반 시 실행을 막는다. 막히면 문구를 고쳐 다시 실행한다.
 일시 해제는 환경변수 `CLAUDE_GIT_STYLE=off`.
 
