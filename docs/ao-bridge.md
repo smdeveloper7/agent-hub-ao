@@ -84,6 +84,18 @@ Main Claude Code 세션(허브)이 [Agent Orchestrator](https://github.com/Orche
 }
 ```
 
+## Main 두 가지 모드
+
+| 모드 | Main 이 사는 곳 | 알림 경로 | 감시 프로세스 |
+|---|---|---|---|
+| 허브 창 | 허브 폴더에서 연 `claude` | 세션 inbox(named pipe·Unix 소켓) | 그 세션에 붙어 SessionStart 훅이 띄움 |
+| Manager Agent(권장) | AO 프로젝트 `hub` 의 orchestrator 세션 | `ao send --steer`(고정 핸들), transcript 도착 확인 | Manager 의 `resume` 이 떼어 띄움(`watch --ao-main`) |
+
+Main 은 늘 하나입니다. 마지막에 `resume` 하거나 열린 쪽이 Main 을 이어받고, 이전 감시 프로세스는 스스로 멈춥니다.
+Manager 프로젝트에는 `aohub assign` 으로 일을 맡기지 않습니다. `setup-manager` 가 프로젝트 등록, 규칙, 세션을 준비합니다.
+
+규칙·배정·알림에 적는 aohub 명령은 `~/.claude-hub-ao/bin/aohub.py` 입니다. 깔린 플러그인 중 가장 새 판을 부르는 고정 실행 파일이라 업데이트 뒤에도 끊기지 않습니다.
+
 ## 명령
 
 | 명령 | 쓰는 쪽 | 하는 일 |
@@ -98,7 +110,8 @@ Main Claude Code 세션(허브)이 [Agent Orchestrator](https://github.com/Orche
 | `verify <작업>` | Main/감시 | Worker 작업 공간에서 검증 명령 실행, 커밋·변경 확인. 검증 명령이 없으면 `확인 필요` 로 둠 |
 | `accept <작업> --note` | Main | 검증 명령 없는 작업을 사용자 확인으로 완료 |
 | `notices`, `ack <N>` | Main | Main 에 보낸 알림, 처리 기록 |
-| `watch` | Main 세션 안 | 주기적으로 AO 를 읽고 알림을 Main inbox 로 보냄 |
+| `watch` | Main 세션 안 | 주기적으로 AO 를 읽고 알림을 Main inbox 로 보냄. `--ao-main <세션>` 이면 Manager 에 ao send |
+| `setup-manager --path --name` | 처음 한 번 | 허브 폴더를 AO 프로젝트로 등록하고 Manager Agent 세션과 감시 프로세스 준비 |
 | `resume` | Main | 재시작 뒤 Main 등록, 진행 중 작업·질문·알림, 읽을 노트 |
 | `poll`, `sync`, `daily` | Main | 한 번 읽기, 노트 다시 그리기, 오늘 정리와 `wiki/log.md` 한 줄 |
 | `sup-report --task --kind worker\|progress\|question\|done\|blocked` | Supervisor | Main 으로 가는 유일한 통로. DB 에만 쓴다 |

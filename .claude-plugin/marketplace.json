@@ -9,7 +9,7 @@
     {
       "name": "agent-hub-ao",
       "source": "./",
-      "version": "0.4.3",
+      "version": "0.4.4",
       "description": "Agent Orchestrator 연동(aohub)과 Obsidian 기록을 더한 허브·슈퍼바이저 플러그인",
       "license": "MIT"
     }

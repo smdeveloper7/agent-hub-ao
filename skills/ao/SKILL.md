@@ -10,7 +10,9 @@ argument-hint: "[assign|status|questions|answer|resume|daily] ..."
 AO 는 Supervisor 와 Worker 의 실행 상태와 수명 주기를 맡는다. 같은 작업을 `claude --bg` 세션과 AO 로 겹쳐 맡기지 않는다.
 AO 로 맡긴 작업은 AO 로만 띄우고, 보고, 멈춘다.
 
-명령은 이렇게 부른다. 아래에서 `aohub` 는 이 줄 전체를 뜻한다.
+이 세션은 허브 폴더에서 연 `claude` 창이거나, AO 프로젝트 `hub` 의 orchestrator(Manager Agent)다. 둘 다 같은 규칙을 따른다.
+
+명령은 이렇게 부른다. 아래에서 `aohub` 는 이 줄 전체를 뜻한다(고정 실행 파일 `~/.claude-hub-ao/bin/aohub.py` 를 써도 된다).
 
 ```
 "<python>" "${CLAUDE_PLUGIN_ROOT}/scripts/aohub.py" <명령>
@@ -24,7 +26,7 @@ AO 로 맡긴 작업은 AO 로만 띄우고, 보고, 멈춘다.
 
 1. `aohub resume` 을 실행한다. 진행 중 작업, AO 에서 다시 확인한 현재 상태, 미처리 질문과 알림, 읽어야 할 노트가 나온다.
 2. `notes_to_read` 의 프로젝트 노트와 결정 노트를 읽는다. 이전 결정과 그 이유를 여기서 찾는다.
-3. `watcher_running` 이 false 면 Bash 백그라운드(run_in_background)로 `aohub watch` 를 시작한다.
+3. Manager Agent(AO 세션)면 resume 이 감시 프로세스를 알아서 띄운다. 허브 창에서 `watcher_running` 이 false 면 Bash 백그라운드(run_in_background)로 `aohub watch` 를 시작한다.
    감시 프로세스는 이 세션의 inbox 주소와 토큰을 물려받아야 하므로 반드시 이 세션 안에서 띄운다. 다른 터미널에서 띄우지 않는다.
 4. 미처리 질문이 있으면 사용자에게 묻는다(아래 "질문").
 

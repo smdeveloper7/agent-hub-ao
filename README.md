@@ -102,9 +102,21 @@ claude
 
 세션이 열리면 훅이 세션 이름을 `hub` 로 붙이고(이미 이름이 있으면 그대로), 감시 프로세스를 이 세션에 붙이고, 대시보드(http://127.0.0.1:4990)를 띄웁니다. 시작 화면에 `AO 감시 시작(Main hub, …)` 이 보이면 이 창이 Main 입니다.
 
+### 5. Manager Agent 로 쓰기(권장)
+
+Main 을 AO 프로젝트의 orchestrator 로 띄우면 AO 앱(과 모바일 앱) 한 곳에서 Main 과 대화하고, Supervisor·Worker 진행도 같이 봅니다.
+알림은 공식 경로인 `ao send` 로 들어가고, 감시 프로세스는 Main 세션과 따로 돕니다.
+
+```sh
+python ~/.claude-hub-ao/bin/aohub.py setup-manager --path ~/hub --name "Manager Agent"
+```
+
+허브 폴더를 git 저장소로 만들고, AO 프로젝트 `hub`(이름 Manager Agent)로 등록하고, Manager 규칙을 넣고, Manager 세션과 감시 프로세스를 띄웁니다. 다시 실행해도 결과가 같습니다.
+이후에는 AO 앱에서 **Manager Agent** 세션을 열어 말합니다. 허브 폴더에서 연 `claude` 창은 비상용으로 남습니다(그 창을 열면 그 창이 Main 을 이어받습니다).
+
 ## 쓰는 법
 
-새 화면은 없습니다. Main 대화창이 쓰는 곳입니다.
+새 화면은 없습니다. Main 대화창(AO 앱의 Manager Agent, 또는 허브 폴더의 `claude` 창)이 쓰는 곳입니다.
 
 ```
 나: ao-demo-a 에 multiply 함수 추가 맡겨줘. 시험 통과가 완료 조건이야.
@@ -118,9 +130,9 @@ Main: Supervisor 에 전달했고 도착을 확인했습니다. 결정과 이유
 
 | 화면 | 용도 |
 |---|---|
-| Main 대화창 | 맡기기, 결과·질문 받기, 답하기, "AO 작업 상태 알려줘", "오늘 작업 정리해줘" |
+| Main 대화창(AO 앱 Manager Agent 또는 허브 `claude` 창) | 맡기기, 결과·질문 받기, 답하기, "AO 작업 상태 알려줘", "오늘 작업 정리해줘" |
 | Obsidian | `wiki/AO 현황.base`(프로젝트 현황, 판단 대기, 완료 작업, 결정 기록), 작업·결정·프로젝트 노트. 메모를 더해도 보존됩니다 |
-| AO 데스크톱 앱 | Supervisor·Worker 세션을 직접 보고 싶을 때(선택) |
+| AO 데스크톱 앱 | Manager Agent 와 대화(Manager 모드), Supervisor·Worker 진행 보기, 권한 승인. Supervisor 에게 직접 지시하면 Main 기록에서 빠지니 지시는 Manager 에게 합니다 |
 | 허브 대시보드 | 허브 팀 세션 현황. AO 가 띄운 세션과 이 PC 의 다른 세션은 접힌 묶음으로 둡니다(AO 작업은 AO 앱과 Obsidian 에서 봅니다) |
 
 Main 이 쓰는 명령은 `/agent-hub-ao:ao` 스킬에 있고, 사용자가 직접 칠 일은 없습니다. 자주 쓰는 것:
@@ -188,7 +200,8 @@ Windows 에서 실제 AO 0.14.8 과 Claude Code 2.1.318 로 확인한 것은 다
 |---|---|
 | 배정 → Supervisor → Worker → 결과 → Main 보고 | Claude Code·Codex Worker 모두 확인, Main 이 작업 공간에서 시험 재실행 |
 | 질문 → Main → 사용자 답 → 전달 → 재개 | Supervisor transcript 에서 답 도착 확인, 결정 노트·일일 로그 기록 |
-| 입력 대기 중인 Main 의 자동 수신 | 알림이 새 turn 으로 시작됨 |
+| 입력 대기 중인 Main 의 자동 수신 | 알림이 새 turn 으로 시작됨(허브 창 inbox, Manager Agent 의 ao send 모두) |
+| Manager Agent 모드 | AO 로 받은 요청을 Manager 가 배정하고, 완료 알림을 ao send 로 받아 직접 확인 뒤 보고 |
 | 두 프로젝트 동시 배정 | 세션·커밋·기록이 섞이지 않음 |
 | 전송 불확실·재수신 | 재전송 전 AO 전달 기록과 transcript 확인, 같은 작업·Worker·기록이 다시 생기지 않음 |
 | Main·감시 프로세스 재시작 | 새 Main 이 `resume` 으로 진행 중 작업, 열린 질문, 이전 결정 이유를 찾음 |
