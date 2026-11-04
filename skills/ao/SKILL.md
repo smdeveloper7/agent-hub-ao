@@ -108,6 +108,11 @@ AO 로 맡긴 작업은 AO 로만 띄우고, 보고, 멈춘다.
 2. Vault 에 위키 정리 규칙(예: AGENTS.md)이 있으면 그대로 따르고, 없으면 raw 를 근거로 `wiki/projects`, `wiki/decisions`, `wiki/index.md` 를 정리한다.
    AO 자동 구역(`<!-- aohub:begin … -->`) 밖만 사람이 쓰는 곳이다. 자동 구역 안은 고치지 않는다.
 
+## 문장
+
+- 사용자 보고, 결정 노트의 답과 이유, 인계 노트 요약은 `agent-hub-ao:humanizer` 기준으로 쓴다(과장, 상투어, 군더더기 없이).
+- 배정 메시지와 Supervisor 규칙에는 커밋 문구 규칙(`agent-hub-ao:git-message`)이 들어간다. Codex worker 에게도 전달된다.
+
 ## 하지 않는 것
 
 - Supervisor 나 Worker 에게 Vault, 작업일지, 허브 문서를 쓰게 하지 않는다. 기록은 `aohub` 한 곳에서 한다.

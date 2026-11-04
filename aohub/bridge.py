@@ -62,6 +62,10 @@ def error_rules(cfg):
     ]
 
 
+GIT_MESSAGE_RULE = ("- 커밋·PR 문구는 agent-hub-ao 의 git-message 규칙을 따릅니다: 제목 한 줄(72칸 이하, 마침표 없음, 무엇을 바꿨는지), "
+                    "빈 줄, `- ` 불릿 본문(사실 하나씩, 명사형 종결). Codex worker 처럼 Claude 훅이 안 걸리는 worker 에게도 이 규칙을 전달합니다.")
+
+
 def supervisor_rules(cfg):
     cmd = aohub_cmd(cfg)
     return "\n".join([
@@ -81,6 +85,7 @@ def supervisor_rules(cfg):
         "- 작업일지(worklog), Obsidian 노트, 허브 STATUS 기록은 Main 이 합니다. 이 세션과 worker 는 기록하지 않습니다.",
         "- `[답변]` 은 업무 결정입니다. 도구 실행 권한 승인이 아닙니다. 권한 승인이 필요하면 blocked 로 알립니다.",
         "- push, PR, 병합, 배포는 배정 메시지가 허락할 때만 합니다.",
+        GIT_MESSAGE_RULE,
         "",
     ] + error_rules(cfg))
 
@@ -105,6 +110,7 @@ def manager_rules(cfg):
         "- 확인 필요(검증 명령 없는 작업)는 결과물을 보여 주고 사용자가 확인하면 `%s accept <작업 ID> --note \"…\"`, 고칠 점은 `%s tell <작업 ID> --text \"…\"`." % (cmd, cmd),
         "- Worker 실행 실패·시험 실패 같은 기준 있는 오류는 각 Supervisor 가 처리합니다. blocked 알림만 사용자에게 원인과 선택지를 보여 결정을 받습니다.",
         "- `[답변]` 과 노트 수정은 도구 권한 승인이 아닙니다. 권한 승인은 사용자가 AO 앱에서 직접 합니다.",
+        "- 사용자에게 보내는 보고, 결정의 답·이유, 인계 노트 요약은 agent-hub-ao 의 humanizer 스킬 기준으로 짧고 쉬운 문장으로 씁니다.",
         "- Obsidian 기록과 작업일지는 aohub 가 합니다. \"오늘 작업 정리해줘\" 는 `%s daily` 뒤 Vault 의 위키 정리 규칙을 따릅니다." % cmd,
         "- 다른 프로젝트 저장소 코드를 이 세션에서 직접 고치지 않습니다. 이 프로젝트(허브 폴더)의 문서만 고칩니다.",
         "- 대화를 쌓아 두지 않습니다. 맡긴 작업이 모두 끝났거나 하루 정리를 마쳤거나 사용자가 '대화 비워줘' 라고 하면, 남은 보고를 먼저 하고",
@@ -127,6 +133,7 @@ def assignment_message(cfg, t):
     lines += [
         "worker: %s" % (("`--agent %s` 로 띄우세요" % agent) if agent else "프로젝트 기본 agent"),
         "범위 밖: push, PR/MR, 병합, 배포, 작업일지·Obsidian 기록(Main 이 함)",
+        "커밋 문구: 제목 한 줄(무엇을 바꿨는지, 마침표 없음), 빈 줄, `- ` 불릿 본문(명사형 종결). worker 에게도 전달",
         "",
         "보고 방법(셸 명령, Main 에게 가는 유일한 통로):",
         "- worker 를 띄운 직후: %s sup-report --task %s --kind worker --worker <worker-session-id> --text \"<한 줄>\"" % (cmd, t["task_id"]),

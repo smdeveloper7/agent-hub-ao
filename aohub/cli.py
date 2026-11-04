@@ -572,11 +572,11 @@ def main(argv=None):
         sys.stderr.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
-    a = build().parse_args(argv)
-    try:
+    try:  # 명령 해석보다 먼저: 옛 판에 없는 명령으로 불려도 고정 실행 파일은 최신 판으로 갱신
         launcher.ensure()
     except OSError:
         pass
+    a = build().parse_args(argv)
     try:
         rc = a.fn(a)
     except (AOError, ValueError) as e:
