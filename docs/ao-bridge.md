@@ -56,7 +56,7 @@ Main Claude Code 세션(허브)이 [Agent Orchestrator](https://github.com/Orche
    python <플러그인>/scripts/aohub.py setup-project <id>      # orchestratorRules 에 연동 규칙(이후 띄우는 Supervisor 부터 적용)
    ```
 
-4. 허브 폴더에서 Main 세션을 엽니다. 플러그인의 SessionStart 훅(`hooks/ao_watch_start.py`)이 `aohub watch` 를 이 세션에 붙여 띄웁니다.
+4. 허브 폴더에서 Main 세션을 엽니다. 플러그인의 SessionStart 훅(`hooks/ao_watch_start.py`)이 세션 이름을 `hub`(설정 `hub_title`)로 붙이고 `aohub watch` 를 이 세션에 붙여 띄웁니다.
    훅을 쓰지 않으면 Main 안에서 Bash 백그라운드로 `aohub watch` 를 실행합니다. 감시 프로세스는 Main 세션의 inbox 주소와 토큰을 물려받아야 하므로 다른 터미널에서 띄우면 안 됩니다.
 5. `/agent-hub-ao:ao` 스킬의 규칙대로 씁니다.
 

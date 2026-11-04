@@ -306,6 +306,35 @@ class EscalationTest(Base):
         self.assertEqual([n["kind"] for n in self.store.notices()], ["blocked"])
 
 
+class HubHookTest(unittest.TestCase):
+    """허브 폴더에서 열린 세션에 이름(sessionTitle)을 붙이는 SessionStart 훅."""
+
+    def run_hook(self, cwd, extra=None, title=None):
+        hub = tempfile.mkdtemp(prefix="aohub-hub-")
+        self.addCleanup(shutil.rmtree, hub, True)
+        inp = {"session_id": "s1", "cwd": hub if cwd == "hub" else cwd}
+        if extra:
+            inp.update(extra)
+        env = dict(os.environ, CLAUDE_PLUGIN_OPTION_HUB_DIR=hub, CLAUDE_PROJECT_DIR=inp["cwd"],
+                   AOHUB_HOME=os.path.join(hub, "no-aohub"))
+        if title is not None:
+            env["CLAUDE_PLUGIN_OPTION_HUB_TITLE"] = title
+        p = subprocess.run([sys.executable, os.path.join(ROOT, "hooks", "ao_watch_start.py")], input=json.dumps(inp),
+                           capture_output=True, encoding="utf-8", env=env)
+        return json.loads(p.stdout) if p.stdout.strip() else None
+
+    def test_titles_hub_session(self):
+        out = self.run_hook("hub")
+        self.assertEqual(out["hookSpecificOutput"]["sessionTitle"], "hub")
+
+    def test_custom_title(self):
+        self.assertEqual(self.run_hook("hub", title="main")["hookSpecificOutput"]["sessionTitle"], "main")
+
+    def test_keeps_existing_title_and_ignores_other_folders(self):
+        self.assertIsNone(self.run_hook("hub", {"session_title": "내이름"}))
+        self.assertIsNone(self.run_hook(tempfile.gettempdir()))
+
+
 class VaultTest(Base):
     def test_notes_keep_user_memo_and_properties(self):
         t, _, _ = self.assign()

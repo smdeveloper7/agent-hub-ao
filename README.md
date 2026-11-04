@@ -100,7 +100,7 @@ cd ~/hub
 claude
 ```
 
-세션이 열리면 훅이 감시 프로세스를 이 세션에 붙이고, 대시보드(http://127.0.0.1:4990)를 띄웁니다. 세션 안에서 `/rename hub` 를 한 번 입력합니다.
+세션이 열리면 훅이 세션 이름을 `hub` 로 붙이고(이미 이름이 있으면 그대로), 감시 프로세스를 이 세션에 붙이고, 대시보드(http://127.0.0.1:4990)를 띄웁니다. 시작 화면에 `AO 감시 시작(Main hub, …)` 이 보이면 이 창이 Main 입니다.
 
 ## 쓰는 법
 
@@ -210,7 +210,7 @@ Windows 에서 실제 AO 0.14.8 과 Claude Code 2.1.318 로 확인한 것은 다
 | 훅 | 언제 | 하는 일 |
 |---|---|---|
 | `open_dashboard.py` | 세션 시작 | 허브 폴더에서 열리면 대시보드를 띄우고, `orca` 가 켜져 있으면 Orca 탭으로 엽니다 |
-| `ao_watch_start.py` | 세션 시작 | 허브 폴더에서 열리고 aohub 가 설정되어 있으면 감시 프로세스를 그 세션에 붙입니다 |
+| `ao_watch_start.py` | 세션 시작 | 허브 폴더에서 열리면 세션 이름을 `hub` 로 붙이고, aohub 가 설정되어 있으면 감시 프로세스를 그 세션에 붙입니다 |
 | `hub_only_write.py` | Edit, Write 직전 | 허브 폴더 밖 세션이 허브 폴더 파일을 고치지 못하게 막습니다 |
 | `git-message-style.py` | Bash, PowerShell 직전 | git 커밋·PR 문구가 개조식 규칙을 어기면 막습니다(`CLAUDE_GIT_STYLE=off` 로 잠시 끔) |
 
@@ -221,6 +221,7 @@ Windows 에서 실제 AO 0.14.8 과 Claude Code 2.1.318 로 확인한 것은 다
 | `dashboard_port` | 아니오 | 대시보드 포트 | `4990` |
 | `orca` | 아니오 | Orca 탭으로 대시보드 열기 | 켬 |
 | `ao_watch` | 아니오 | 허브 세션에 AO 감시 프로세스 붙이기 | 켬 |
+| `hub_title` | 아니오 | 허브 세션에 자동으로 붙일 이름(`/rename` 과 같음). 비우면 붙이지 않음 | `hub` |
 
 허브 폴더 구성, 대시보드 화면, 설정 예시는 [templates/hub/CLAUDE.md](templates/hub/CLAUDE.md), [dashboard/README.md](dashboard/README.md), [examples/](examples/) 에 있습니다. 허브 규칙의 감독 스킬은 [Addy-skills](https://github.com/holiday0726/Addy-skills) 플러그인을 함께 설치해 씁니다(`/agent-hub-ao:setup` 이 설치).
 
