@@ -9,8 +9,8 @@
     {
       "name": "agent-hub-ao",
       "source": "./",
-      "version": "0.4.10",
-      "description": "Agent Orchestrator 연동(aohub)과 Obsidian 기록을 더한 허브·슈퍼바이저 플러그인",
+      "version": "0.5.0",
+      "description": "허브 세션이 프로젝트별 세션에 일을 맡기고 대시보드로 보는 허브 플러그인",
       "license": "MIT"
     }
   ]

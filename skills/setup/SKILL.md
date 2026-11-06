@@ -126,7 +126,7 @@ claude plugin install addy-skills --marketplace holiday0726/Addy-skills
    지금 세션을 닫는다.
 2. 허브 폴더에서 세션을 연다(`cd <허브 폴더>` 뒤 `claude`).
    `대시보드 http://127.0.0.1:4990 떠 있음` 이 보이면 브라우저로 연다.
-3. 허브 세션 이름은 SessionStart 훅이 `hub` 로 붙인다(설정 `hub_title`). 시작 화면에 `AO 감시 시작(Main hub, …)` 이 보이면 된다.
+3. 허브 세션 이름은 SessionStart 훅이 `hub` 로 붙인다(설정 `hub_title`). 대시보드 에이전트 목록에 `hub` 로 보이면 된다.
    대시보드는 `agents.json` 의 `hub` 세션을 허브로 본다. 이름을 바꿨다면 `agents.json` 의 키도 같이 바꾼다.
 4. 손으로 채울 자리: `.claude/settings.json` 의 `<레인 저장소>` 자리, `supervisor.settings.json` 의 `autoMode.allow`, `CLAUDE.md` 와 `COORDINATION.md` 의 `<...>` 자리.
 

@@ -463,10 +463,9 @@ assert t['counts'] == {'in_progress': 2, 'pending': 2}, t['counts']   # stale gr
 assert server.todos([], os.path.join(d, 'none'), os.path.join(d, 'none')) == {'groups': [], 'counts': {'in_progress': 0, 'pending': 0}}
 shutil.rmtree(d)
 
-# 세션 출처: 허브 팀(agents.json), AO 가 띄운 세션, 그 밖의 세션
+# 세션 출처: 허브 팀(agents.json), 그 밖의 세션
 assert server.origin({'group': 'resident', 'cwd': 'C:/Users/me/hub'}) == 'team'
-assert server.origin({'group': 'other', 'cwd': r'C:\Users\me\.ao\data\worktrees\p\p-1'}) == 'ao'
-assert server.origin({'group': 'other', 'cwd': '/home/me/.ao/data/worktrees/p/orchestrator/x'}) == 'ao'
+assert server.origin({'group': 'task', 'cwd': 'C:/Users/me/projects/nipa/ax-flow'}) == 'team'
 assert server.origin({'group': 'other', 'cwd': 'C:/Users/me/projects/nipa'}) == 'other'
 assert all('origin' in a for a in server.arrange([{'name': 'x', 'group': 'other', 'cwd': '/tmp'}]))
 print('ok')

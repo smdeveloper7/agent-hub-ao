@@ -17,10 +17,9 @@
             "type": "command",
             "command": "${user_config.python}",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/ao_watch_start.py"
+              "${CLAUDE_PLUGIN_ROOT}/hooks/hub_title.py"
             ],
-            "timeout": 20,
-            "statusMessage": "AO 감시 연결 중"
+            "timeout": 10
           }
         ]
       }
@@ -34,14 +33,6 @@
             "command": "${user_config.python}",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/hub_only_write.py"
-            ],
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "${user_config.python}",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/vault_main_only.py"
             ],
             "timeout": 10
           }

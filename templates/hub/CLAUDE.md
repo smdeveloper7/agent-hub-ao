@@ -44,11 +44,6 @@
 | 사용자가 요청한 일을 판단하거나 고민을 정리할 때 | `addy-skills:decision-support` |
 | 같은 지적이나 같은 실수가 반복될 때(허브가 스스로 판단) | `addy-skills:capture-misses` |
 
-## AO 프로젝트
-
-- Agent Orchestrator 에 등록된 프로젝트의 일은 `agent-hub-ao:ao` 스킬대로 `aohub assign` 으로 그 프로젝트 Supervisor 에 맡긴다. 아래 `claude --bg` 절차로 같은 일을 겹쳐 맡기지 않는다.
-- 세션을 열면 `aohub resume` 으로 진행 중 작업과 미처리 질문을 확인하고, `[AO 알림]`·`[AO 질문]` 은 스킬의 처리 순서를 따른다.
-
 ## 세션 다루기
 
 - `STATUS.md` 에 등록된 팀 세션에는 사용자 지시를 바로 `SendMessage` 로 전달한다. 형식은 `COORDINATION.md` "배정과 보고". 등록 안 된 세션에는 보내지 않는다.

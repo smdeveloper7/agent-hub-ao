@@ -125,15 +125,9 @@ def section(a):
     return 'wait'                     # blocked on a person, or an interactive session waiting for the next prompt
 
 
-AO_DATA = '/.ao/data/'   # Agent Orchestrator 가 띄운 Supervisor·Worker 의 작업 공간
-
-
 def origin(a):
-    """team: agents.json 에 있는 허브 팀, ao: AO 가 띄운 세션(AO 앱에서 봄), other: 그 밖의 이 PC 세션."""
-    if a.get('group') in ('resident', 'task'):
-        return 'team'
-    cwd = (a.get('cwd') or '').replace('\\', '/').lower()
-    return 'ao' if AO_DATA in cwd else 'other'
+    """team: agents.json 에 있는 허브 팀, other: 그 밖의 이 PC 세션."""
+    return 'team' if a.get('group') in ('resident', 'task') else 'other'
 
 
 def arrange(rows):
